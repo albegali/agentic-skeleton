@@ -8,7 +8,16 @@ A repository skeleton for **agent-supervised software development**: AI agents d
 - **Stack neutral**: `/architecture` proposes the stack, writes the ADRs, and wires `make setup/test/lint`.
 - **English by default**; `/kickoff` can set another language for the artifacts.
 
-Requirements: Python ≥ 3.11 (stdlib only), `make`, git.
+## Prerequisites
+
+| Need | Why | Check |
+|---|---|---|
+| Python ≥ 3.11 | workflow tools (stdlib only, nothing to install) | `python3 --version` |
+| `make` | entry points (`make next`, `make check`, …) | `make --version` |
+| git | versioning, `git diff` for reviews | `git --version` |
+| At least one agent tool | Claude Code, OpenAI Codex CLI, GitHub Copilot (VS Code) or Cursor, with an active plan or API key | see [docs/GUIDE.md §4](docs/GUIDE.md#4-set-up-your-agent-tools) |
+
+You also need someone in the **product owner** role who approves artifacts, and source material for your idea: a brief, meeting transcripts, existing specs, or simply your own notes.
 
 ## Quick start
 
