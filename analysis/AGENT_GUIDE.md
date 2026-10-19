@@ -29,6 +29,7 @@ Stop if the ID of an artifact meant for delivery is missing.
 - Declare missing sources; never invent requirements; keep unresolved points explicitly open.
 - Highlight conflicts with requirements, ADRs or the release plan.
 - Anticipate technical points only when they affect functional understanding, create refinement questions, or expose scope/dependency/ownership risks.
+- Workshop points: functional/business questions need an answer from the PO or stakeholders; technical points always come with the analyst's proposal (resolution, rationale, alternatives, confidence), which stands unless the team overrides it.
 
 ## 7. Boundary with delivery
 No automatic handoff: analyst outputs become delivery input only when the user explicitly asks (e.g. `/brief <ID>`).

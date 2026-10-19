@@ -101,13 +101,17 @@ Points to resolve before the story is ready for development (input for Brief, Sp
 
 ### Functional points to resolve
 
-- [High impact] ...
+Business or functional questions only: an answer from the PO / stakeholder is mandatory. A technical point that needs a business trade-off (cost, risk acceptance, vendor, scope, user-visible behaviour) belongs here, phrased as the business question.
+
+- [High impact] <question> — <why it matters / what it blocks>
 - [Medium impact] ...
 - [Low impact] ...
 
 ### Technical points to resolve
 
-- [High impact] ...
+Each point carries the analyst's proposal, consistent with the cited ADRs and constraints. No answer required: the proposal stands unless the team overrides it in the workshop.
+
+- [High impact] <point> — **Proposal**: <resolution> · **Why**: <rationale, sources> · **Alternatives**: <short> · **Confidence**: high | medium | low
 - [Medium impact] ...
 - [Low impact] ...
 
@@ -115,7 +119,7 @@ Points to resolve before the story is ready for development (input for Brief, Sp
 
 - Story scope confirmed or reformulated
 - Acceptance criteria clarified and testable
-- High-impact functional points resolved
-- High-impact technical points resolved or assigned to the correct owner
+- High-impact functional points answered by the PO / stakeholder
+- Technical proposals accepted or overridden by the team (unchallenged proposals stand)
 - Residual assumptions explicitly documented
 ```
