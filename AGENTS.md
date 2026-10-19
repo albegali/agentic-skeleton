@@ -33,6 +33,8 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 - Analyst mode never creates Brief, Spec, RUN or code. Developer mode never requires a Refined Story to start; Brief is always developer-owned.
 - No code without a RUN whose Execution Strategy is approved by a human (RUN §2). Never expand scope beyond the Spec.
 - Agents never pass a human gate on their own: approvals of inception artifacts, workshop, Spec `Ready`, RUN strategy, tuning acceptance.
+- Owner decisions recorded in workshop minutes or given in chat **are** human approvals: apply their consequences without asking again. An artifact already `approved`/`accepted` keeps its status when the change applied is one the owner decided; add a revision line citing the source. Only changes the owner has not decided go back to `draft`/`proposed`.
+- End every step with the next command and each pending human gate as `file → field → value`: the human never has to ask what comes next or how to approve.
 - Templates in `inception/templates/`, `analysis/templates/`, `delivery/templates/` are authoritative: use them as they are.
 - No secrets or personal data in logs, artifacts or prompts.
 
