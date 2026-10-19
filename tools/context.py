@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Print the exact context budget of a step, so agents read nothing else.
+
+Usage:
+  python3 tools/context.py <step> [ID…]        # files to read, cited FR/NFR/ADR sections, command outputs
+  python3 tools/context.py --index <file.md>   # headings only (cheap table of contents)
+  python3 tools/context.py --package-rules     # package-level AGENTS.md files
+
+Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run).
+"""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(__file__))
+import wf  # noqa: E402
+
+REQ_FILES = {"FR": "reference/product/functional-requirements.md", "NFR": "reference/product/non-functional-requirements.md"}
+REF_RX = re.compile(r"\b(FR|NFR|ADR)-(\d+)\b")
+BIG = 400  # lines: warn the agent to read only what it needs
+ROOT_RULES = {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}
+
+
+def section(text: str, start_rx: str) -> str | None:
+    """From the heading matching start_rx to the next heading of the same or higher level."""
+    lines = text.splitlines()
+    for n, line in enumerate(lines):
+        m = re.match(r"^(#+)\s", line)
+        if m and re.search(start_rx, line):
+            level = len(m.group(1))
+            end = next((k for k in range(n + 1, len(lines))
+                        if (h := re.match(r"^(#+)\s", lines[k])) and len(h.group(1)) <= level), len(lines))
+            return "\n".join(lines[n:end]).strip()
+    return None
+
+
+def tail_from(text: str, num: str) -> str | None:
+    """From heading `## <num>.` to the end of the file (e.g. Analysis §6-7)."""
+    m = re.search(rf"^##\s+{re.escape(num)}\.", text, re.M)
+    return text[m.start():].strip() if m else None
+
+
+def index(p: str) -> str:
+    if not wf.exists(p):
+        return f"(missing: {p})"
+    return "\n".join(line for line in wf.read(p).splitlines() if re.match(r"^#{1,4}\s", line))
+
+
+def package_rules() -> list[str]:
+    out = []
+    for p in wf.matches("**/AGENTS.md"):
+        r = wf.rel(p)
+        if r not in ROOT_RULES and not r.startswith(("node_modules", ".venv")) and "/node_modules/" not in r:
+            out.append(r)
+    return out
+
+
+def refs_in(text: str) -> list[tuple[str, str]]:
+    seen: dict[tuple[str, str], None] = {}
+    for kind, num in REF_RX.findall(text):
+        seen[(kind, num)] = None
+    return list(seen)
+
+
+def expand(pattern: str, ids: list[str], dep: str | None = None) -> str:
+    return pattern.replace("{ID}", ids[0] if ids else "*").replace("{DEP}", dep or "*")
+
+
+def budget(step: str, ids: list[str]) -> str:
+    cfg = wf.workflow().get("steps", {}).get(step)
+    if cfg is None:
+        sys.exit(f"Unknown step: {step}. Steps: {', '.join(wf.workflow().get('steps', {}))}")
+    ids = ids or []
+    out = [f"# Context budget — step '{step}' · tier {cfg.get('tier', '—')}" + (f" · IDs {' '.join(ids)}" if ids else ""),
+           f"Step file: workflow/steps/{step}.md. Read ONLY what follows; for anything else, ask or grep a specific symbol.", ""]
+    full: list[str] = []
+    missing: list[str] = []
+    needs_id = any("{ID}" in p for k in ("read", "first", "refs_from") for p in cfg.get(k, []))
+    if needs_id and not ids:
+        out += [f"⚠ step '{step}' needs story IDs: python3 tools/context.py {step} <ID…>", ""]
+    for i in ids or [None]:
+        cur = [i] if i else []
+        for pat in cfg.get("read", []):
+            if "{ID}" in pat and not i:
+                continue
+            found = wf.matches(expand(pat, cur))
+            (full.extend(found) if found else missing.append(expand(pat, cur)))
+        alts = cfg.get("first", [])
+        if alts and i:
+            hit = next((wf.matches(expand(a, cur)) for a in alts if wf.matches(expand(a, cur))), None)
+            full.extend(hit[:1]) if hit else missing.append(" | ".join(expand(a, cur) for a in alts))
+    full = list(dict.fromkeys(full))
+    missing = list(dict.fromkeys(missing))
+
+    out.append("## Read in full")
+    for p in full:
+        n = wf.read(p).count("\n") + 1
+        out.append(f"- {wf.rel(p)} ({n} lines){'  ⚠ long: read only the sections you need' if n > BIG else ''}")
+    if missing:
+        out += ["", "## Missing (declare as missing source if relevant)"] + [f"- {m}" for m in missing]
+
+    # cited references: only the sections
+    refs: list[tuple[str, str]] = []
+    for i in ids:
+        for pat in cfg.get("refs_from", []):
+            for p in wf.matches(expand(pat, [i])):
+                refs += refs_in(wf.read(p))
+    refs = list(dict.fromkeys(refs))
+    if refs:
+        out += ["", "## Cited references (extracted sections only)"]
+        for kind, num in refs:
+            if kind == "ADR":
+                hit = wf.matches(f"reference/architecture/ADR-{int(num):03d}*.md") or wf.matches(f"reference/architecture/ADR-{num}*.md")
+                out.append(f"- ADR-{num}: " + (f"read {wf.rel(hit[0])}" if hit else "missing"))
+                continue
+            f = REQ_FILES[kind]
+            sec = section(wf.read(f), rf"\b{kind}-{num}\b") if wf.exists(f) else None
+            out += ["", f"### {kind}-{num} ({f})", sec or "(not found)"]
+
+    # dependency excerpts
+    deps_cfg = cfg.get("deps", [])
+    if deps_cfg and ids:
+        st = wf.stories()
+        deps = list(dict.fromkeys(d for i in ids for d in st.get(i, {}).get("deps", [])))
+        for d in deps:
+            for pat in deps_cfg:
+                file_pat, _, num = pat.partition("#")
+                hit = wf.matches(expand(file_pat, ids, d))
+                if hit:
+                    exc = tail_from(wf.read(hit[0]), num) if num else wf.read(hit[0])
+                    out += ["", f"### Dependency {d} — {wf.rel(hit[0])}" + (f" §{num}+" if num else ""), exc or "(section not found)"]
+
+    for cmd in cfg.get("run", []):
+        res = subprocess.run(cmd, shell=True, cwd=wf.ROOT, capture_output=True, text=True)
+        body = (res.stdout + res.stderr).strip()
+        lines = body.splitlines()
+        if len(lines) > 80:
+            body = "\n".join(lines[:80] + [f"… ({len(lines) - 80} more lines)"])
+        out += ["", f"## $ {cmd}", body or "(no output)"]
+    return "\n".join(out)
+
+
+def main() -> None:
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help"):
+        print(__doc__)
+        return
+    if a[0] == "--index":
+        print(index(a[1]))
+    elif a[0] == "--package-rules":
+        rules = package_rules()
+        print("Package rules (read those of the packages you touch):\n" + "\n".join(f"- {r}" for r in rules) if rules else "No package AGENTS.md yet.")
+    else:
+        print(budget(a[0], [x.replace("-", "") if re.fullmatch(r"[A-Z]+-?\d{4}", x) else x for x in a[1:]]))
+
+
+if __name__ == "__main__":
+    main()

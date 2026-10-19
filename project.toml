@@ -1,0 +1,22 @@
+# Project settings. Written by `/kickoff` (via tools/init_project.py) and `/architecture`.
+# Scripts read this file: keep keys in English.
+
+[project]
+initialized = false          # set to true by tools/init_project.py
+name = "my-project"
+description = ""
+id_prefix = "PR"             # story IDs: <prefix><epic 2 digits><story 2 digits>, e.g. PR0101
+language = "en"              # language of artifact content (templates/headings stay English)
+owner = ""                   # product owner / approver, recorded in approvals
+tracker = "local"            # local | <adapter name>; see tools/README.md "Tracker adapters"
+
+[inception]
+mockup = true                # include the /mockup step in the lifecycle
+
+[stack]
+# Filled by /architecture once the ADRs are approved. Used by Makefile targets setup / test / lint.
+decided = false
+summary = ""
+setup = ""
+test = ""
+lint = ""

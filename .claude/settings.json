@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make next)",
+      "Bash(make check)",
+      "Bash(make backlog)",
+      "Bash(make agents)",
+      "Bash(make test-tools)",
+      "Bash(python3 tools/next_step.py:*)",
+      "Bash(python3 tools/context.py:*)",
+      "Bash(python3 tools/gen_backlog.py:*)",
+      "Bash(python3 tools/check_workflow.py)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(terraform apply:*)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

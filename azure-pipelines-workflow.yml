@@ -1,0 +1,11 @@
+# Same checks as .github/workflows/workflow-check.yml, for Azure Pipelines.
+trigger: [main]
+pr: [main]
+pool: { vmImage: ubuntu-latest }
+steps:
+  - task: UsePythonVersion@0
+    inputs: { versionSpec: "3.12" }
+  - script: make check
+    displayName: Workflow consistency
+  - script: make test-tools
+    displayName: Workflow tools tests

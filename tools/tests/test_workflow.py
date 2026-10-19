@@ -1,0 +1,270 @@
+"""End-to-end tests of the workflow tools on a temporary copy of the skeleton (stdlib unittest)."""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(SRC, "tools"))
+from init_project import set_key  # noqa: E402
+
+FR = """---
+status: {st}
+---
+# Functional requirements
+## Capability
+### FR-01 — Create item
+- **Statement**: The system shall create items.
+- **Priority**: Must
+- **UI**: yes
+### FR-02 — Export
+- **Statement**: The system shall export items.
+- **Priority**: Should
+## Open questions
+"""
+NFR = "---\nstatus: {st}\n---\n# NFR\n## Security\n### NFR-01 — Auth\n- **Target**: SSO\n"
+STORIES = """status = "{st}"
+[[epic]]
+id = "EP-01"
+name = "Foundations"
+description = "x"
+[[story]]
+id = "DM0101"
+epic = "EP-01"
+slug = "walking-skeleton"
+title = "Walking skeleton"
+priority = "Must"
+size = "M"
+fr = ["FR-01"]
+nfr = ["NFR-01"]
+deps = []
+ac = [["a", "b", "c"]]
+[[story]]
+id = "DM0102"
+epic = "EP-01"
+slug = "export"
+title = "Export"
+priority = "Should"
+size = "S"
+fr = ["FR-02"]
+deps = ["DM0101"]
+ac = [["a", "b", "c"]]
+"""
+PLAN = "---\nstatus: {st}\n---\n# PLAN\n| Sprint | Dates | Goal | Stories |\n|---|---|---|---|\n| S1 | 01/01 – 14/01 | Foundations | DM0101, DM0102 |\n"
+ANALYSIS_MD = "---\nartifact_type: analysis\nstatus: workshop-ready\n---\n# Analysis\n## 6. Ambiguities\n- dep note {i}\n## 7. Workshop\n- [High impact] x\n"
+REFINED_MD = "---\nartifact_type: refined\nstatus: refined\n---\n# Refined Story\n## 8. Refinement Outcome\n- Story ready for Brief intake\n"
+BRIEF_MD = "# BRIEF-{i}\n## Status\nCaptured\n"
+SPEC_MD = "# SPEC-{i}\n## References\n- Brief: BRIEF-{i}\n## Status\n{st}\n"
+RUN = """# RUN-{i}
+## Status
+{st}
+# 1. Execution Strategy (Agent)
+### Plan
+- Step 1: {plan}
+# 2. Human Approval
+- [{ok}] Approved
+# 7. Persistence / Reconciliation
+- [{ok}] Spec updated
+"""
+
+
+class Repo:
+    def __init__(self) -> None:
+        self.dir = tempfile.mkdtemp(prefix="wf-")
+        shutil.copytree(SRC, self.dir, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"))
+        self.env = {**os.environ, "WF_ROOT": self.dir}
+
+    def run(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess:
+        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True)
+        if ok and r.returncode != 0:
+            raise AssertionError(f"{args} failed:\n{r.stdout}\n{r.stderr}")
+        return r
+
+    def write(self, p: str, t: str) -> None:
+        full = os.path.join(self.dir, p)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write(t)
+
+    def read(self, p: str) -> str:
+        with open(os.path.join(self.dir, p), encoding="utf-8") as f:
+            return f.read()
+
+    def next(self, *a: str) -> dict:
+        return json.loads(self.run("tools/next_step.py", "--json", *a).stdout)
+
+    def toml_set(self, f: str, section: str, key: str, value) -> None:
+        self.write(f, set_key(self.read(f), section, key, value))
+
+    def init(self) -> None:
+        self.run("tools/init_project.py", "--name", "Demo", "--prefix", "DM", "--language", "it", "--owner", "PO")
+
+    def through_inception(self) -> None:
+        self.init()
+        self.write("reference/product/vision.md", "---\nstatus: approved\n---\n# Vision\n")
+        self.write("reference/product/functional-requirements.md", FR.format(st="approved"))
+        self.write("reference/product/non-functional-requirements.md", NFR.format(st="approved"))
+        self.write("reference/product/mockup-reference.md", "---\nstatus: approved\n---\n| a | renderA | FR-01 |\n")
+        self.write("reference/architecture/architecture.md", "---\nstatus: approved\n---\n# Arch\n")
+        self.write("reference/architecture/ADR-001-stack.md", "---\nstatus: accepted\n---\n# ADR-001\n")
+        self.toml_set("project.toml", "stack", "decided", True)
+        self.write("backlog/stories.toml", STORIES.format(st="approved"))
+        self.write("PLAN.md", PLAN.format(st="approved"))
+
+    def cleanup(self) -> None:
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
+class WorkflowTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.r = Repo()
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def test_fresh_skeleton_is_consistent_and_starts_with_kickoff(self):
+        self.assertEqual(self.r.next()["step"], "kickoff")
+        self.r.run("tools/check_workflow.py")
+        self.r.run("tools/render_agents.py", "--check")
+
+    def test_init_project_updates_settings_and_adapters(self):
+        self.r.run("tools/init_project.py", "--name", "Demo", "--prefix", "DM", "--language", "it", "--tools", "claude-code,codex")
+        p = self.r.read("project.toml")
+        self.assertIn('id_prefix = "DM"', p)
+        self.assertIn('language = "it"', p)
+        self.assertIn("initialized = true", p)
+        self.assertIn("# story IDs", p)  # comments preserved
+        self.assertIn("DM0101", self.r.read("inception/templates/stories.toml"))
+        self.assertFalse(os.path.exists(os.path.join(self.r.dir, ".cursor/commands/next.md")))
+        self.assertTrue(os.path.exists(os.path.join(self.r.dir, ".codex/prompts/next.md")))
+        self.r.run("tools/check_workflow.py")
+        bad = self.r.run("tools/init_project.py", "--name", "x", "--prefix", "toolong", ok=False)
+        self.assertNotEqual(bad.returncode, 0)
+
+    def test_inception_gates_in_order(self):
+        r = self.r
+        r.init()
+        self.assertEqual(r.next()["step"], "kickoff")
+        r.write("reference/product/vision.md", "---\nstatus: draft\n---\n")
+        n = r.next()
+        self.assertEqual((n["step"], n["after"]), ("approve", "kickoff"))
+        r.write("reference/product/vision.md", "---\nstatus: approved   # draft | approved\n---\n")
+        self.assertEqual(r.next()["step"], "requirements")
+        r.write("reference/product/functional-requirements.md", FR.format(st="approved"))
+        r.write("reference/product/non-functional-requirements.md", NFR.format(st="draft"))
+        self.assertEqual(r.next()["step"], "approve")
+        r.write("reference/product/non-functional-requirements.md", NFR.format(st="approved"))
+        self.assertEqual(r.next()["step"], "mockup")
+        r.toml_set("project.toml", "inception", "mockup", False)
+        self.assertEqual(r.next()["step"], "architecture")
+        r.write("reference/architecture/architecture.md", "---\nstatus: approved\n---\n")
+        r.write("reference/architecture/ADR-001-stack.md", "---\nstatus: proposed\n---\n")
+        n = r.next()
+        self.assertEqual(n["step"], "approve")
+        self.assertIn("reference/architecture/ADR-001-stack.md", n["files"])
+        r.write("reference/architecture/ADR-001-stack.md", "---\nstatus: accepted\n---\n")
+        self.assertEqual(r.next()["files"], ["project.toml [stack] decided = true"])
+        r.toml_set("project.toml", "stack", "decided", True)
+        self.assertEqual(r.next()["step"], "backlog")
+        r.write("backlog/stories.toml", STORIES.format(st="draft"))
+        self.assertEqual(r.next()["step"], "approve")
+        r.write("backlog/stories.toml", STORIES.format(st="approved"))
+        self.assertEqual(r.next()["step"], "plan")
+        r.write("PLAN.md", PLAN.format(st="approved"))
+        n = r.next()
+        self.assertEqual((n["phase"], n["step"], n["ids"]), ("delivery", "analysis", ["DM0101", "DM0102"]))
+        self.assertEqual(n["command"], "/analysis DM0101 DM0102")
+        self.assertEqual(n["models"]["claude-code"], "sonnet")
+
+    def test_story_chain_to_closure(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0101"
+        r.write(f"analysis/20-analysis/ANALYSIS_{i}_walking_skeleton.md", ANALYSIS_MD.format(i=i))
+        r.write("analysis/20-analysis/ANALYSIS_DM0102_export.md", ANALYSIS_MD.format(i="DM0102"))
+        self.assertEqual(r.next()["step"], "human-gate")
+        r.write(f"analysis/30-refined/REFINED_{i}_walking_skeleton.md", REFINED_MD)
+        self.assertEqual((r.next()["step"], r.next()["ids"]), ("brief-spec", [i]))
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        self.assertEqual(r.next(i)["step"], "spec-approval")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        self.assertEqual(r.next()["step"], "run-strategy")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Draft", plan="build", ok=" "))
+        self.assertEqual(r.next(i)["step"], "run-approval")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Executing", plan="build", ok="x"))
+        self.assertEqual(r.next()["step"], "execute")
+        r.run("tools/check_workflow.py")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Closed", plan="build", ok="x"))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        self.assertEqual(r.next(i)["step"], "done")
+        self.assertEqual(r.next("DM0102")["step"], "workshop")
+        r.run("tools/check_workflow.py")
+
+    def test_check_detects_errors(self):
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('deps = []', 'deps = ["DM0102"]').replace('fr = ["FR-02"]', 'fr = ["FR-09"]'))
+        r.write("delivery/30-runs/RUN-DM0101.md", RUN.format(i="DM0101", st="Executing", plan="x", ok=" "))
+        out = r.run("tools/check_workflow.py", ok=False)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("dependency cycle", out.stdout)
+        self.assertIn("unknown FR-09", out.stdout)
+        self.assertIn("without recorded approval", out.stdout)
+        self.assertIn("SPEC-DM0101 missing", out.stdout)
+
+    def test_stale_adapter_detected(self):
+        with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
+            f.write("manual edit\n")
+        out = self.r.run("tools/check_workflow.py", ok=False)
+        self.assertIn("stale adapter", out.stdout)
+        self.r.run("tools/render_agents.py")
+        self.r.run("tools/check_workflow.py")
+
+    def test_context_extracts_only_cited_sections(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        self.assertTrue(os.path.exists(os.path.join(r.dir, "analysis/10-stories/STORY_DM0102_export.md")))
+        r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
+        out = r.run("tools/context.py", "analysis", "DM0102").stdout
+        self.assertIn("analysis/10-stories/STORY_DM0102_export.md", out)
+        self.assertIn("### FR-02 — Export", out)
+        self.assertNotIn("FR-01 — Create item", out)
+        self.assertIn("Dependency DM0101", out)
+        self.assertIn("dep note DM0101", out)
+        self.assertNotIn("[High impact] x\n\n### FR", out.split("Dependency")[0])
+        idx = r.run("tools/context.py", "--index", "reference/product/functional-requirements.md").stdout
+        self.assertIn("### FR-02 — Export", idx)
+        self.assertNotIn("Statement", idx)
+        warn = r.run("tools/context.py", "analysis").stdout
+        self.assertIn("needs story IDs", warn)
+
+    def test_gen_backlog_keeps_analyzed_stories(self):
+        r = self.r
+        r.through_inception()
+        r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
+        out = r.run("tools/gen_backlog.py").stdout
+        self.assertIn("Story written 1, skipped 1", out)
+        self.assertIn("| DM0101 |", r.read("analysis/output/consolidated/backlog_overview.md"))
+        deps = r.run("tools/gen_backlog.py", "--deps").stdout
+        self.assertIn("DM0102 [EP-01 Should S ] Export ← DM0101", deps)
+
+    def test_rename_id(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        r.run("tools/rename_id.py", "DM0102", "DM0199")
+        self.assertIn('id = "DM0199"', r.read("backlog/stories.toml"))
+        self.assertTrue(os.path.exists(os.path.join(r.dir, "analysis/10-stories/STORY_DM0199_export.md")))
+        self.assertIn("DM0199", r.read("PLAN.md"))
+
+
+if __name__ == "__main__":
+    unittest.main()

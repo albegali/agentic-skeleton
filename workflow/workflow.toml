@@ -1,0 +1,368 @@
+# Single source of truth for the agentic workflow.
+#   [steps.*]    lifecycle steps: owner, tier, context budget (read by tools/context.py and tools/next_step.py)
+#   [commands.*] slash commands rendered for every enabled tool by tools/render_agents.py
+#   [agents.*]   optional specialist subagents (rendered where the tool supports them)
+# After editing: `make agents` (regenerates adapters and workflow/STEPS.md), then `make check`.
+#
+# Context budget placeholders: {ID} story ID, {DEP} each dependency of the story.
+#   read      files read in full (globs allowed; missing files are reported, not fatal)
+#   refs_from files whose FR-xx / NFR-xx / ADR-xxx references are expanded: only the cited sections are printed
+#   run       commands whose output is part of the context
+#   first     alternatives: the first pattern that matches wins (e.g. Refined Story, else Analysis, else Story)
+
+# ------------------------------------------------------------------ inception (product mode)
+
+[steps.kickoff]
+title = "Project kickoff: settings, vision, summary, stakeholders, glossary"
+owner = "agent"
+mode = "product"
+command = "kickoff"
+tier = "balanced"
+session = "fresh"
+read = ["project.toml", "inception/templates/vision.md", "inception/templates/project-summary.md", "inception/templates/stakeholders.md", "inception/templates/glossary.md"]
+
+[steps.requirements]
+title = "Functional and non-functional requirements"
+owner = "agent"
+mode = "product"
+command = "requirements"
+tier = "balanced"
+session = "fresh"
+read = ["reference/product/vision.md", "reference/project-summary.md", "reference/domain/glossary.md", "inception/templates/functional-requirements.md", "inception/templates/non-functional-requirements.md"]
+
+[steps.mockup]
+title = "Clickable mockup and screen ↔ requirement map"
+owner = "agent"
+mode = "product"
+command = "mockup"
+tier = "balanced"
+session = "fresh"
+read = ["reference/project-summary.md", "reference/product/functional-requirements.md", "reference/domain/glossary.md", "inception/templates/mockup-reference.md"]
+
+[steps.architecture]
+title = "Stack, architecture, ADRs"
+owner = "agent"
+mode = "product"
+command = "architecture"
+tier = "deep"
+session = "fresh"
+read = ["project.toml", "reference/project-summary.md", "reference/product/non-functional-requirements.md", "reference/product/mockup-reference.md", "inception/templates/architecture.md", "inception/templates/adr.md"]
+run = ["python3 tools/context.py --index reference/product/functional-requirements.md"]
+
+[steps.backlog]
+title = "Epics and user stories"
+owner = "agent"
+mode = "product"
+command = "backlog"
+tier = "balanced"
+session = "fresh"
+read = ["reference/product/functional-requirements.md", "reference/architecture/architecture.md", "inception/templates/stories.toml"]
+run = ["python3 tools/context.py --index reference/product/non-functional-requirements.md", "ls reference/architecture"]
+
+[steps.plan]
+title = "Releases and sprints"
+owner = "agent"
+mode = "product"
+command = "release-plan"
+tier = "balanced"
+session = "fresh"
+read = ["reference/product/vision.md", "analysis/output/consolidated/backlog_overview.md", "inception/templates/PLAN.md"]
+run = ["python3 tools/gen_backlog.py --deps"]
+
+[steps.approve]
+title = "Human approval of an inception artifact"
+owner = "human"
+mode = "product"
+
+# ------------------------------------------------------------------ analysis (analyst mode)
+
+[steps.analysis]
+title = "Analysis: functional analysis and workshop preparation"
+owner = "agent"
+mode = "analyst"
+command = "analysis"
+tier = "balanced"
+session = "fresh; at most 4 related stories"
+read = ["analysis/AGENT_GUIDE.md", "analysis/templates/ANALYSIS-template.md", "reference/project-summary.md", "analysis/10-stories/STORY_{ID}_*.md"]
+refs_from = ["analysis/10-stories/STORY_{ID}_*.md"]
+deps = ["analysis/20-analysis/ANALYSIS_{DEP}_*.md#6"]
+
+[steps.workshop]
+title = "Refinement workshop and minutes"
+owner = "human"
+mode = "analyst"
+
+[steps.refine]
+title = "Refined Story after the workshop"
+owner = "agent"
+mode = "analyst"
+command = "refine"
+tier = "balanced"
+session = "fresh; stories of the same workshop together (max 4)"
+read = ["analysis/AGENT_GUIDE.md", "analysis/templates/REFINED-template.md", "analysis/10-stories/STORY_{ID}_*.md", "analysis/20-analysis/ANALYSIS_{ID}_*.md"]
+
+# ------------------------------------------------------------------ delivery (developer mode)
+
+[steps.brief-spec]
+title = "Brief and Spec of one story"
+owner = "agent"
+mode = "developer"
+command = "brief"
+tier = "balanced"
+session = "fresh; one story"
+read = ["delivery/AGENT_GUIDE.md", "delivery/templates/BRIEF-template.md", "delivery/templates/SPEC-template.md"]
+first = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/20-analysis/ANALYSIS_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
+refs_from = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
+
+[steps.spec-approval]
+title = "Human review of the Spec (status → Ready)"
+owner = "human"
+mode = "developer"
+
+[steps.run-strategy]
+title = "RUN execution strategy (no code)"
+owner = "agent"
+mode = "developer"
+command = "run"
+tier = "balanced"
+deep_when = "story size L/XL or new architecture"
+session = "fresh; stays open for approval and execution"
+read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/templates/RUN-template.md", "delivery/guide/run.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+run = ["python3 tools/context.py --package-rules"]
+
+[steps.run-approval]
+title = "Human approval of the RUN strategy"
+owner = "human"
+mode = "developer"
+
+[steps.execute]
+title = "Execution within the Spec scope"
+owner = "agent"
+mode = "developer"
+command = "run"
+tier = "balanced"
+session = "same as the strategy if under ~50% context; otherwise fresh (the RUN is the memory)"
+read = ["delivery/30-runs/RUN-{ID}.md", "delivery/20-specs/SPEC-{ID}-*.md"]
+
+[steps.tuning]
+title = "Human verification, tuning within scope, persistence"
+owner = "human"
+mode = "developer"
+
+[steps.review]
+title = "Independent review before closure"
+owner = "agent"
+mode = "review"
+command = "review-story"
+tier = "balanced"
+session = "fresh (fresh eyes)"
+read = ["delivery/10-briefs/BRIEF-{ID}-*.md", "delivery/20-specs/SPEC-{ID}-*.md", "delivery/30-runs/RUN-{ID}.md"]
+run = ["make check"]
+
+[steps.human-gate]
+title = "Only human actions are pending"
+owner = "human"
+mode = "meta"
+
+# ------------------------------------------------------------------ journal
+
+[steps.weekly]
+title = "Weekly project journal"
+owner = "agent"
+mode = "journal"
+command = "weekly"
+tier = "fast"
+session = "fresh"
+read = ["project-journal/templates/weekly.md", "project-journal/notes/current-week.md"]
+run = ["git log --since='7 days ago' --oneline", "python3 tools/next_step.py"]
+
+# ================================================================== commands
+# body: the prompt. $ARGUMENTS is replaced with each tool's argument syntax.
+# tools: Claude Code allowed-tools (optional; omitted = default permissions).
+
+[commands.next]
+description = "Compute the next workflow step and tell which command, mode and model to use (minimal cost)"
+args = "[ID]  (optional: state of one story)"
+tier = "fast"
+mode = "meta"
+tools = ["Bash(python3 tools/next_step.py:*)", "Read"]
+body = """
+Do not explore the repository: the state is computed by the script.
+
+1. Run `python3 tools/next_step.py $ARGUMENTS`.
+2. Read only `workflow/steps/<recommended step>.md` (and the optional parallel step's file, if any). Nothing else.
+3. Answer in at most 10 lines:
+
+```
+State: <phase / current sprint, 1 line>
+Next: <step> — <IDs>
+Who: <mode | YOU (human gate)>  ·  Tier: <tier> → <model printed by the script>
+Why: <1 line>
+Run: <fresh session> → <exact command with IDs>     (or: "human action: …")
+In parallel (optional): <command>
+Waiting on you: <human gates, if any>
+```
+
+4. Do not execute the step in this session. If the weekly reminder is printed, add one line with `/weekly`.
+"""
+
+[commands.choose-models]
+description = "Choose the model per tier for each vendor/tool, then regenerate the adapters"
+args = "[vendor or tool]"
+tier = "fast"
+mode = "meta"
+body = """
+Arguments: $ARGUMENTS
+1. Read `models.toml`. Show a compact table tier × enabled tool with the current model, and mark entries flagged "verify".
+2. Ask the user, one question per tool, which model to use per tier (offer the current value as default; propose the vendor's latest small / mid / large model for fast / balanced / deep). If a web search tool is available, verify the current model names first.
+3. Update `models.toml` (keep comments), run `make agents`, then `make check`.
+Chat: the final table, nothing else.
+"""
+
+[commands.kickoff]
+description = "Inception — set up the project (name, ID prefix, language, tools) and write vision, summary, stakeholders, glossary"
+args = "[project name] [source files: brief, transcript, notes…]"
+tier = "balanced"
+mode = "product"
+body = "Follow `workflow/steps/kickoff.md`. Arguments: $ARGUMENTS"
+
+[commands.requirements]
+description = "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from the vision and sources"
+args = "[source files: transcripts, documents…]"
+tier = "balanced"
+mode = "product"
+body = "Follow `workflow/steps/requirements.md`. Sources: $ARGUMENTS"
+
+[commands.mockup]
+description = "Inception — single-file clickable HTML mockup and the screen ↔ FR map"
+args = "[FR-xx… | screen names]  (empty = all UI requirements)"
+tier = "balanced"
+mode = "product"
+body = "Follow `workflow/steps/mockup.md`. Scope: $ARGUMENTS"
+
+[commands.architecture]
+description = "Inception — stack proposal, ADRs, architecture, data model, Makefile targets"
+args = "[constraints or preferred stack]"
+tier = "deep"
+mode = "product"
+body = "Follow `workflow/steps/architecture.md`. User constraints: $ARGUMENTS"
+
+[commands.backlog]
+description = "Inception — epics and user stories in backlog/stories.toml, then generate the Story files"
+args = "[epic or FR scope]  (empty = whole backlog)"
+tier = "balanced"
+mode = "product"
+body = "Follow `workflow/steps/backlog.md`. Scope: $ARGUMENTS"
+
+[commands.release-plan]
+description = "Inception — releases and sprints in PLAN.md, respecting dependencies"
+args = "[sprint length, team capacity, milestones]"
+tier = "balanced"
+mode = "product"
+body = "Follow `workflow/steps/plan.md`. Constraints: $ARGUMENTS"
+
+[commands.analysis]
+description = "Analyst mode — Analysis of one or more stories (max 4 related)"
+args = "<ID…>"
+tier = "balanced"
+mode = "analyst"
+body = "Follow `workflow/steps/analysis.md` with {IDS} = $ARGUMENTS."
+
+[commands.refine]
+description = "Analyst mode — Refined Story after the workshop (requires the minutes)"
+args = "<ID…> <minutes file>"
+tier = "balanced"
+mode = "analyst"
+body = """
+Follow `workflow/steps/refine.md` with arguments $ARGUMENTS: the IDs are {IDS}, the file path is {MINUTES}.
+If the minutes or the ID are missing, stop and ask.
+"""
+
+[commands.brief]
+description = "Developer mode — Brief + Spec of one story, then stop for human review"
+args = "<ID>"
+tier = "balanced"
+mode = "developer"
+body = "Follow `workflow/steps/brief-spec.md` with {ID} = $ARGUMENTS. One story per session."
+
+[commands.spec]
+description = "Developer mode — update an existing Spec (e.g. after human review)"
+args = "<ID> <requested changes>"
+tier = "balanced"
+mode = "developer"
+body = """
+Developer mode. Arguments: $ARGUMENTS. Update only `delivery/20-specs/SPEC-<ID>-*.md` as requested, following `delivery/templates/SPEC-template.md`.
+Do not touch the Brief, except for an Addendum if the intent changes. Chat: 3 lines with what changed.
+"""
+
+[commands.run]
+description = "Developer mode — RUN strategy, approval, execution, tuning (same session for the same story)"
+args = "<ID> [approve | revise: … | tuning: …]"
+tier = "balanced"
+mode = "developer"
+body = """
+Arguments: $ARGUMENTS.
+
+- ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
+- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, then follow `workflow/steps/execute.md`.
+- `revise: …` → update only the strategy and stop again.
+- ID only with an approved strategy → resume following `workflow/steps/execute.md`.
+- `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`).
+
+Use the deep tier only if the user asked for it or the story is L/XL.
+"""
+
+[commands.persist]
+description = "Developer mode — persistence/reconciliation and RUN closure"
+args = "<ID>"
+tier = "balanced"
+mode = "developer"
+body = """
+Developer mode, ID $ARGUMENTS (`delivery/AGENT_GUIDE.md` §7, steps 7-8).
+1. Update the Spec (§11) and only the `reference/` docs touched by the story.
+2. Complete RUN §7-10: status `Persisted`, then `Closed` if the quality gates are met.
+3. Fill "Closed at" and "Derived Artifacts" in the Brief; update `delivery/20-specs/README.md`.
+4. Run `make check`.
+Chat: outcome in 3 lines.
+"""
+
+[commands.review-story]
+description = "Review mode — independent review of one story before closure"
+args = "<ID>"
+tier = "balanced"
+mode = "review"
+body = "Follow `workflow/steps/review.md` with {ID} = $ARGUMENTS. Do not modify code."
+
+[commands.weekly]
+description = "Project journal — weekly summary (minimal cost)"
+args = ""
+tier = "fast"
+mode = "journal"
+body = "Follow `workflow/steps/weekly.md`."
+
+# ================================================================== subagents (optional)
+
+[agents.analyst]
+description = "Analyst mode — Analysis, Refined Story, backlog consolidation. Never creates Brief/Spec/RUN or code."
+tier = "balanced"
+tools = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+body = "You are the analyst. Follow `analysis/AGENT_GUIDE.md`. Write only inside `analysis/`; read `reference/`. Use `analysis/templates/` as they are."
+
+[agents.developer]
+description = "Developer mode — executes an approved Spec through a RUN (strategy before code, human approval, in-scope execution, tuning, persistence)."
+tier = "balanced"
+tools = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+body = "You are the Execution Agent of `delivery/AGENT_GUIDE.md`. Read the `AGENTS.md` of the packages you touch before writing the strategy and cite them in the RUN. No code before the approval is recorded in RUN §2. Never beyond the Spec."
+
+[agents.reviewer]
+description = "Review mode — checks Brief/Spec/RUN alignment, scope creep, quality gates and persistence. Never modifies code."
+tier = "balanced"
+tools = ["Read", "Grep", "Glob", "Bash"]
+body = "You are the Reviewer. Run `make check`, then verify artifact consistency and the diff by hand. Return only observations and change requests."
+
+[agents.journal]
+description = "Project journal — prepares the weekly from notes, git log and plan state with minimal cost."
+tier = "fast"
+tools = ["Read", "Write", "Bash"]
+body = "Follow `workflow/steps/weekly.md` and `project-journal/CONTRIBUTING.md`. Verifiable facts only; proposals marked as such."

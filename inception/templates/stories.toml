@@ -1,0 +1,31 @@
+# Backlog source of truth. Generate the views with `make backlog`; check with `make check`.
+# Story ID: <id_prefix><epic 2 digits><story 2 digits>, e.g. PR0101 (project.toml → id_prefix).
+
+status = "draft"   # draft | approved
+
+[[epic]]
+id = "EP-01"
+name = "Technical foundations"
+description = "Walking skeleton, identity, infrastructure, observability, as required by the ADRs."
+
+[[story]]
+id = "PR0101"
+epic = "EP-01"
+slug = "walking-skeleton"
+title = "Walking skeleton"
+type = "technical"          # feature | technical | spike
+as_a = "development team"
+i_want = "an empty service with build, tests, CI and a health endpoint"
+so_that = "every later story has its place ready"
+priority = "Must"           # Must | Should | Could | Won't
+release = "R1"
+size = "M"                  # S | M | L | XL
+fr = []
+nfr = []
+deps = []
+ac = [
+  ["the cloned repository", "I run `make setup && make test`", "the tests pass"],
+  ["a merge on main", "the pipeline runs", "build, lint, tests are green"],
+]
+notes = ""
+out_of_scope = "Domain features."
