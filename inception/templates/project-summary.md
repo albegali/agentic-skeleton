@@ -5,10 +5,11 @@
 - **What**: <one sentence>
 - **For whom**: <users>
 - **Why**: <problem / outcome>
+- **Type and platforms**: <web app, service, mobile, desktop, game, embedded, library, CLI, data, infrastructure, … · target OS / devices / browsers / runtimes>
 - **First release**: <scope in one line, target date>
 - **Out of scope**: <one line>
 - **Key constraints**: <time, regulations, integrations>
-- **Stack**: <filled by /architecture, see reference/architecture/architecture.md>
+- **Stack**: <filled by /architecture or /onboard, see reference/architecture/architecture.md>
 - **Owner / approver**: <name>
 - **Artifact language**: <en | …>
 

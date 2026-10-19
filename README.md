@@ -6,6 +6,7 @@ A repository skeleton for **agent-supervised software development**: AI agents d
 - **Model and vendor agnostic**: one neutral source (`workflow/workflow.toml`) is rendered into commands for **Claude Code, OpenAI Codex CLI, GitHub Copilot and Cursor**. Steps declare a tier (`fast` / `balanced` / `deep`); you choose the model per tier and vendor in `models.toml`.
 - **Token-frugal by design**: a deterministic script computes the state (`make next`), another prints the exact context of each step (`tools/context.py`), commands are thin, sessions are short.
 - **Stack neutral**: `/architecture` proposes the stack, writes the ADRs, and wires `make setup/test/lint`.
+- **Any kind of software, new or existing**: web, services on any cloud or on-prem, mobile, desktop, games, firmware, libraries, CLIs, data, infrastructure. `make adopt TARGET=<repo>` installs the workflow into any existing repository without overwriting its files, and `/onboard` documents the codebase as the baseline (architecture, retroactive ADRs, package rules, FR index).
 - **English by default**; `/kickoff` can set another language for the artifacts.
 
 ## Prerequisites
@@ -41,6 +42,8 @@ Then in your agent tool:
 | 7 | `/release-plan` | approve `PLAN.md` |
 | 8… | `/next` and follow it | workshops, Spec review, strategy approval, tuning |
 
+**Existing codebase?** From the skeleton: `make adopt TARGET=../my-app ARGS="--dry-run"`, then without `--dry-run`; commit in the target, then `/onboard` → `/backlog` → `/release-plan` → `/next`. See [docs/GUIDE.md §3 Option D](docs/GUIDE.md#option-d--an-existing-codebase-brownfield).
+
 Every agent step runs in a **fresh session**. `/next` (or `make next`) always tells you the next command, its tier and the model to use for each of your tools.
 
 ## Repository map
@@ -57,7 +60,7 @@ reference/                product, architecture, domain, mockup — read via too
 backlog/stories.toml      backlog source of truth (created by /backlog)
 PLAN.md                   release plan (created by /release-plan)
 project-journal/          weekly / monthly memory of the project
-tools/                    next_step, context, check_workflow, gen_backlog, render_agents, init_project, rename_id (+ tests)
+tools/                    next_step, context, check_workflow, gen_backlog, render_agents, init_project, rename_id, adopt, repo_map (+ tests)
 .claude/ .codex/ .github/prompts/ .cursor/   generated adapters — do not edit, run `make agents`
 ```
 
@@ -73,6 +76,7 @@ tools/                    next_step, context, check_workflow, gen_backlog, rende
 | `make test-tools` | tests of the workflow tools |
 | `make setup / test / lint` | stack commands from `project.toml [stack]` |
 | `make codex-prompts` | link the Codex prompts into `~/.codex/prompts` |
+| `make adopt TARGET=<repo>` | install the workflow into an existing repository (run from the skeleton; `ARGS="--dry-run"` first) |
 
 ## Tool notes
 

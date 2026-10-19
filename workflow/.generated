@@ -10,6 +10,7 @@
 .claude/commands/kickoff.md
 .claude/commands/mockup.md
 .claude/commands/next.md
+.claude/commands/onboard.md
 .claude/commands/persist.md
 .claude/commands/refine.md
 .claude/commands/release-plan.md
@@ -27,6 +28,7 @@
 .codex/prompts/kickoff.md
 .codex/prompts/mockup.md
 .codex/prompts/next.md
+.codex/prompts/onboard.md
 .codex/prompts/persist.md
 .codex/prompts/refine.md
 .codex/prompts/release-plan.md
@@ -43,6 +45,7 @@
 .cursor/commands/kickoff.md
 .cursor/commands/mockup.md
 .cursor/commands/next.md
+.cursor/commands/onboard.md
 .cursor/commands/persist.md
 .cursor/commands/refine.md
 .cursor/commands/release-plan.md
@@ -61,6 +64,7 @@
 .github/prompts/kickoff.prompt.md
 .github/prompts/mockup.prompt.md
 .github/prompts/next.prompt.md
+.github/prompts/onboard.prompt.md
 .github/prompts/persist.prompt.md
 .github/prompts/refine.prompt.md
 .github/prompts/release-plan.prompt.md

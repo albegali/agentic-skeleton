@@ -19,6 +19,7 @@ Full step table (generated): [`STEPS.md`](STEPS.md). Step procedures: [`steps/`]
 | Phase | Steps | Human gates |
 |---|---|---|
 | Inception | `/kickoff` → `/requirements` → `/mockup` (optional) → `/architecture` → `/backlog` → `/release-plan` | approve each artifact (`status: approved`) |
+| Inception, existing codebase | `make adopt TARGET=…` (from the skeleton) → `/onboard` → `/backlog` → `/release-plan` | approve the onboarding artifacts, then backlog and plan |
 | Analysis | `/analysis` → workshop → `/refine` | workshop + minutes |
 | Delivery | `/brief` → Spec review → `/run` (strategy) → `/run <ID> approve` → execution → `/run <ID> tuning: …` → `/persist` → `/review-story` | Spec `Ready`, strategy approval, tuning acceptance |
 | Journal | `/weekly` (fast tier) | — |
@@ -28,7 +29,7 @@ Order in delivery: analysis one sprint ahead; development one story at a time, i
 ## Choosing models
 
 - Steps declare a **tier**; `models.toml` maps tier → model per vendor and tool. `/choose-models` walks you through it, `make agents` regenerates the adapters.
-- Defaults: `fast` for `/next`, `/weekly`, `/choose-models`; `balanced` for everything else; `deep` for `/architecture`. Ask for deep explicitly on L/XL stories (`/run <ID>` + "use the deep tier").
+- Defaults: `fast` for `/next`, `/weekly`, `/choose-models`; `balanced` for everything else; `deep` for `/architecture` and `/onboard`. Ask for deep explicitly on L/XL stories (`/run <ID>` + "use the deep tier").
 - Claude Code and Copilot pin the model per command; Codex and Cursor print the recommended model at the top of the command: switch to it before running.
 
 ## Token rules (summary of AGENTS.md §5)

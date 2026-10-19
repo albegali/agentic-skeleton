@@ -8,31 +8,31 @@ last_updated: YYYY-MM-DD
 # Architecture
 
 ## 1. Context
-<System context: users, external systems, trust boundaries. A Mermaid diagram is welcome.>
+<Software type(s) and target platforms (web, service, mobile, desktop, game, embedded, library, CLI, data, infrastructure, extension, … · OS / devices / browsers / runtimes). Users, external systems, devices, trust boundaries. A Mermaid diagram is welcome.>
 
 ## 2. Building blocks
-| Container / module | Responsibility | Technology | Package path | Package rules |
+| Building block (app, service, library, module, firmware, …) | Responsibility | Technology | Package path | Package rules |
 |---|---|---|---|---|
-| … | … | … | `server/` | `server/AGENTS.md` |
+| … | … | … | `<path>/` | `<path>/AGENTS.md` |
 
-## 3. Data model (outline)
-<Main entities, ownership, lifecycle. Details grow story by story.>
+## 3. Data and persistence (outline)
+<Main entities, ownership, lifecycle, and where they live: database, local or device storage, files, external system, none. Details grow story by story.>
 
-## 4. Integrations
-| External system | Direction | Protocol | Port / adapter | Owner | Phase |
+## 4. Integrations and interfaces
+| External system / device / host | Direction | Protocol / API / format | Port / adapter | Owner | Phase |
 |---|---|---|---|---|---|
 
 ## 5. Security and privacy
-<AuthN/AuthZ, secrets, personal data, logging rules (no PII in logs).>
+<AuthN/AuthZ, OS or device permissions, secrets and signing keys, personal data, logging rules (no PII in logs).>
 
 ## 6. Observability
-<Logs, metrics, traces, audit.>
+<Logs, metrics, traces, crash reporting, telemetry, audit: as fits the product (none is a valid answer).>
 
-## 7. Environments and delivery
-<Environments, CI/CD, infrastructure as code.>
+## 7. Build, environments and distribution
+<How it is built, which environments exist, and how it reaches its users: cloud or on-prem deployment (any provider), app stores, installers and auto-update, firmware flashing / OTA, package registries, … CI/CD and infrastructure as code, if any.>
 
 ## 8. Testing strategy
-<Unit / integration / e2e, what each layer proves, commands.>
+<Unit / integration / end-to-end / device or manual tests: what each layer proves, commands, target platforms covered.>
 
 ## 9. Conventions for agents
 <Patterns to follow, where new code goes, what never to do.>

@@ -5,8 +5,9 @@ Usage:
   python3 tools/context.py <step> [ID…]        # files to read, cited FR/NFR/ADR sections, command outputs
   python3 tools/context.py --index <file.md>   # headings only (cheap table of contents)
   python3 tools/context.py --package-rules     # package-level AGENTS.md files
+  python3 tools/context.py --repo-map          # map of an existing codebase (tools/repo_map.py)
 
-Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run).
+Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run, run_max).
 """
 from __future__ import annotations
 
@@ -133,12 +134,13 @@ def budget(step: str, ids: list[str]) -> str:
                     exc = tail_from(wf.read(hit[0]), num) if num else wf.read(hit[0])
                     out += ["", f"### Dependency {d} — {wf.rel(hit[0])}" + (f" §{num}+" if num else ""), exc or "(section not found)"]
 
+    cap = cfg.get("run_max", 80)
     for cmd in cfg.get("run", []):
         res = subprocess.run(cmd, shell=True, cwd=wf.ROOT, capture_output=True, text=True)
         body = (res.stdout + res.stderr).strip()
         lines = body.splitlines()
-        if len(lines) > 80:
-            body = "\n".join(lines[:80] + [f"… ({len(lines) - 80} more lines)"])
+        if len(lines) > cap:
+            body = "\n".join(lines[:cap] + [f"… ({len(lines) - cap} more lines)"])
         out += ["", f"## $ {cmd}", body or "(no output)"]
     return "\n".join(out)
 
@@ -153,6 +155,9 @@ def main() -> None:
     elif a[0] == "--package-rules":
         rules = package_rules()
         print("Package rules (read those of the packages you touch):\n" + "\n".join(f"- {r}" for r in rules) if rules else "No package AGENTS.md yet.")
+    elif a[0] == "--repo-map":
+        import repo_map
+        print(repo_map.repo_map())
     else:
         print(budget(a[0], [x.replace("-", "") if re.fullmatch(r"[A-Z]+-?\d{4}", x) else x for x in a[1:]]))
 

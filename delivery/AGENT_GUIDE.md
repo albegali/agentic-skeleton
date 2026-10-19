@@ -42,7 +42,7 @@ Upstream (`analysis/`, Refined Story) feeds Brief and Spec. Once Brief, Spec and
 `delivery/20-specs/README.md`: one row per Spec (`| ID | Title | Status | RUN |`), kept simple. No RUN index: RUNs are reached through their Spec.
 
 ## 7. Quality gates
-Tests updated · build passes · API contract valid · no breaking change unless approved · tuning logged · persistence done · RUN complete.
+Tests updated · build passes · public interfaces valid (API, UI, CLI, formats, library API) · no breaking change unless approved · tuning logged · persistence done · RUN complete.
 
 ## 8. Roles (modes of the same or different agents)
 - **Spec agent** — Brief → Spec: clarifies ambiguity, scope, AC, tasks, gates, stop conditions. No code.

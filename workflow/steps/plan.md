@@ -9,7 +9,7 @@
 2. Write `PLAN.md` from `inception/templates/PLAN.md`:
    - releases with goal, content (epics/stories), target date, exit criterion;
    - sprint table `| S<n> | dates | goal | story IDs |` — this exact shape is parsed by `tools/next_step.py`;
-   - S0 = analysis of the first two sprints (Analysis + workshops); development starts with the walking skeleton;
+   - S0 = analysis of the first two sprints (Analysis + workshops); development starts with the walking skeleton (existing codebase: with the highest-priority change);
    - respect dependencies (a story never precedes its deps); analysis runs one sprint ahead of development.
 3. Keep `status: draft` in the frontmatter. Run `make next` to verify the plan parses.
 

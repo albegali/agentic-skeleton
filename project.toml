@@ -3,6 +3,7 @@
 
 [project]
 initialized = false          # set to true by tools/init_project.py
+origin = "greenfield"        # greenfield | brownfield (existing codebase, set by tools/adopt.py)
 name = "my-project"
 description = ""
 id_prefix = "PR"             # story IDs: <prefix><epic 2 digits><story 2 digits>, e.g. PR0101

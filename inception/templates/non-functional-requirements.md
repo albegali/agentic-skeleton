@@ -24,6 +24,8 @@ last_updated: YYYY-MM-DD
 ## Performance
 ## Availability and resilience
 ## Accessibility
+## Compatibility and platforms
+## Resource usage
 ## Observability
 ## Maintainability
 ## Compliance

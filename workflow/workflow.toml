@@ -9,6 +9,7 @@
 #   refs_from files whose FR-xx / NFR-xx / ADR-xxx references are expanded: only the cited sections are printed
 #   run       commands whose output is part of the context
 #   first     alternatives: the first pattern that matches wins (e.g. Refined Story, else Analysis, else Story)
+#   run_max   max lines printed per `run` command (default 80)
 
 # ------------------------------------------------------------------ inception (product mode)
 
@@ -68,6 +69,17 @@ tier = "balanced"
 session = "fresh"
 read = ["reference/product/vision.md", "analysis/output/consolidated/backlog_overview.md", "inception/templates/PLAN.md"]
 run = ["python3 tools/gen_backlog.py --deps"]
+
+[steps.onboard]
+title = "Existing codebase: document it as the baseline (architecture, ADRs, package rules, FR index, summary)"
+owner = "agent"
+mode = "product"
+command = "onboard"
+tier = "deep"
+session = "fresh"
+read = ["project.toml", "inception/templates/project-summary.md", "inception/templates/vision.md", "inception/templates/architecture.md", "inception/templates/adr.md", "inception/templates/glossary.md"]
+run = ["python3 tools/context.py --repo-map"]
+run_max = 160
 
 [steps.approve]
 title = "Human approval of an inception artifact"
@@ -226,6 +238,13 @@ args = "[project name] [source files: brief, transcript, notes…]"
 tier = "balanced"
 mode = "product"
 body = "Follow `workflow/steps/kickoff.md`. Arguments: $ARGUMENTS"
+
+[commands.onboard]
+description = "Inception (existing codebase) — document the code as it is: architecture, retroactive ADRs, package rules, FR index, summary, vision"
+args = "[focus areas, docs to read, constraints]"
+tier = "deep"
+mode = "product"
+body = "Follow `workflow/steps/onboard.md`. Notes: $ARGUMENTS"
 
 [commands.requirements]
 description = "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from the vision and sources"

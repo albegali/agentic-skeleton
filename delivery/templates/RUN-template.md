@@ -77,7 +77,7 @@ Date:
 
 ### Changes (high-level)
 - Code:
-- API:
+- Interfaces:
 - Domain:
 - Tests:
 - Specs:
@@ -88,7 +88,7 @@ Date:
 
 - Build: OK / FAIL
 - Tests: OK / FAIL
-- API: OK / FAIL
+- Interfaces / target platforms: OK / FAIL
 - Manual (if any): OK / FAIL
 
 Notes:

@@ -66,7 +66,7 @@ The agent is not allowed to:
 
 - [ ] Tests added/updated
 - [ ] Build passes
-- [ ] API contract updated if impacted
+- [ ] Public interfaces updated if impacted (API, UI, CLI, file formats, protocols, library API)
 - [ ] Domain invariants respected
 - [ ] No breaking changes unless explicitly approved
 
@@ -86,9 +86,10 @@ Stop and ask for supervision if:
 # 9. Impacted Areas
 
 - Code:
-- API:
+- Interfaces (API, CLI, file formats, protocols, library API):
 - Domain:
 - UX:
+- Platforms / distribution:
 - Tests:
 - Docs:
 

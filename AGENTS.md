@@ -10,7 +10,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 
 | Mode | For | Writes in | Guide |
 |---|---|---|---|
-| **product** | vision, requirements, mockup, architecture, backlog, release plan (inception) | `reference/`, `backlog/`, `PLAN.md` | `workflow/steps/<step>.md` |
+| **product** | vision, requirements, mockup, architecture, backlog, release plan (inception); onboarding of an existing codebase | `reference/`, `backlog/`, `PLAN.md` | `workflow/steps/<step>.md` |
 | **analyst** | Analysis, workshop preparation, Refined Story, backlog consolidation | `analysis/` | `analysis/AGENT_GUIDE.md` |
 | **developer** | Brief, Spec, RUN, code, persistence | `delivery/`, code | `delivery/AGENT_GUIDE.md` |
 | **review** | consistency Brief/Spec/RUN, scope creep, quality gates | nothing (report only) | `workflow/steps/review.md` |
@@ -20,6 +20,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 
 ```
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
+            existing codebase: tools/adopt.py → onboard → backlog → release plan
 ANALYSIS    Story → Analysis → workshop (human) → Refined Story
 DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist → review → Closed
 ```

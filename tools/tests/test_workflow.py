@@ -266,5 +266,186 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("DM0199", r.read("PLAN.md"))
 
 
+LEGACY = {  # a 10-year-old AngularJS frontend, no backend, its own rules and tooling
+    "bower.json": '{"name": "legacy", "dependencies": {"angular": "1.5.8"}}',
+    "Gruntfile.js": "module.exports = function (grunt) {};\n",
+    "app/index.html": "<html ng-app='legacy'></html>\n",
+    "app/scripts/app.js": "angular.module('legacy', []);\n" * 30,
+    "app/scripts/controllers/orders.js": "angular.module('legacy').controller('OrdersCtrl', function () {});\n",
+    "test/spec/orders.spec.js": "describe('orders', function () {});\n",
+    "tools/build.sh": "#!/bin/sh\ngrunt build\n",
+    "AGENTS.md": "# Team rules\nUse tabs.\n",
+    "CLAUDE.md": "# Our Claude notes\nNever touch app/vendor.\n",
+    ".claude/settings.json": '{"permissions": {"allow": ["Bash(grunt test)"]}, "model": "opus"}',
+    "Makefile": "test:\n\tgrunt test\ncheck:\n\tgrunt jshint\n",
+}
+
+
+class AdoptTest(unittest.TestCase):
+    """tools/adopt.py on an existing repository, then the brownfield path of next_step."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+        self.t = tempfile.mkdtemp(prefix="app-")
+        for p, body in LEGACY.items():
+            full = os.path.join(self.t, p)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(body)
+        for cmd in (["init", "-q", "-b", "main"], ["config", "user.name", "Pat Owner"], ["config", "user.email", "p@example.com"],
+                    ["add", "-A"], ["commit", "-qm", "legacy"]):
+            subprocess.run(["git", *cmd], cwd=self.t, check=True, capture_output=True)
+        self.env = {k: v for k, v in os.environ.items() if k != "WF_ROOT"}
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+        shutil.rmtree(self.t, ignore_errors=True)
+
+    def adopt(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
+        r = subprocess.run([sys.executable, "tools/adopt.py", self.t, *a], cwd=self.r.dir, env=self.env, capture_output=True, text=True)
+        if ok and r.returncode != 0:
+            raise AssertionError(f"adopt failed:\n{r.stdout}\n{r.stderr}")
+        return r
+
+    def tool(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
+        r = subprocess.run([sys.executable, *a], cwd=self.t, env=self.env, capture_output=True, text=True)
+        if ok and r.returncode != 0:
+            raise AssertionError(f"{a} failed:\n{r.stdout}\n{r.stderr}")
+        return r
+
+    def read(self, p: str) -> str:
+        with open(os.path.join(self.t, p), encoding="utf-8") as f:
+            return f.read()
+
+    def write(self, p: str, body: str) -> None:
+        with open(os.path.join(self.t, p), "w", encoding="utf-8") as f:
+            f.write(body)
+
+    def test_dry_run_writes_nothing(self):
+        out = self.adopt("--dry-run").stdout
+        self.assertIn("dry run", out)
+        self.assertFalse(os.path.exists(os.path.join(self.t, "project.toml")))
+
+    def test_adopt_keeps_the_project_files_and_starts_with_onboard(self):
+        self.adopt("--name", "Legacy Shop", "--tools", "claude-code,copilot")
+        self.assertTrue(self.read("AGENTS.md").startswith("# Team rules\nUse tabs."))
+        self.assertIn("agentic-workflow:begin", self.read("AGENTS.md"))
+        self.assertTrue(self.read("CLAUDE.md").startswith("# Our Claude notes"))
+        self.assertIn("@AGENTS.md", self.read("CLAUDE.md"))
+        settings = json.loads(self.read(".claude/settings.json"))
+        self.assertEqual(settings["model"], "opus")
+        self.assertIn("Bash(grunt test)", settings["permissions"]["allow"])
+        self.assertIn("Bash(make next)", settings["permissions"]["allow"])
+        self.assertEqual(self.read("tools/build.sh"), LEGACY["tools/build.sh"])
+        self.assertTrue(self.read("Makefile").startswith(LEGACY["Makefile"]))
+        mk = self.read("workflow.mk")
+        self.assertIn("wf-check:", mk)
+        self.assertNotIn("\ntest", mk)
+        self.assertNotIn("test-tools", mk)
+        self.assertNotIn("adopt:", mk)
+        self.assertIn("| wf-check |", mk)
+        self.assertIn("run /onboard", mk)
+        for absent in ("tools/adopt.py", "tools/tests", ".github/workflows", "README.md", ".cursor"):
+            self.assertFalse(os.path.exists(os.path.join(self.t, absent)), absent)
+        p = self.read("project.toml")
+        self.assertIn('origin = "brownfield"', p)
+        self.assertIn('id_prefix = "LS"', p)
+        self.assertIn('owner = "Pat Owner"', p)
+        self.assertIn('test = "make test"', p)
+        self.tool("tools/check_workflow.py")
+        n = json.loads(self.tool("tools/next_step.py", "--json").stdout)
+        self.assertEqual((n["step"], n["models"]["claude-code"]), ("onboard", "opus"))
+        m = self.tool("tools/context.py", "onboard").stdout
+        self.assertIn("app/scripts/app.js", m)
+        self.assertIn("bower.json", m)
+        self.assertNotIn("workflow/steps", m.split("## $")[1])
+        # rendering again is stable (merge is idempotent)
+        self.tool("tools/render_agents.py")
+        self.tool("tools/render_agents.py", "--check")
+        self.assertEqual(self.read("CLAUDE.md").count("agentic-workflow:begin"), 1)
+
+    def test_brownfield_gates(self):
+        self.adopt("--prefix", "LG")
+        self.write("reference/product/vision.md", "---\nstatus: approved\n---\n")
+        self.write("reference/product/functional-requirements.md", "---\nstatus: approved\n---\n### FR-01 — Orders\n- **Status**: existing\n")
+        self.write("reference/architecture/architecture.md", "---\nstatus: draft\n---\n")
+        n = json.loads(self.tool("tools/next_step.py", "--json").stdout)
+        self.assertEqual((n["step"], n["after"]), ("approve", "onboard"))
+        self.write("reference/architecture/architecture.md", "---\nstatus: approved\n---\n")
+        self.assertEqual(json.loads(self.tool("tools/next_step.py", "--json").stdout)["files"], ["project.toml [stack] decided = true"])
+        self.write("project.toml", set_key(self.read("project.toml"), "stack", "decided", True))
+        self.assertEqual(json.loads(self.tool("tools/next_step.py", "--json").stdout)["step"], "backlog")
+        self.tool("tools/check_workflow.py")
+
+    def test_conflicts_and_guards(self):
+        os.makedirs(os.path.join(self.t, "workflow"))
+        self.write("workflow/workflow.toml", "# something else\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.t, check=True)
+        subprocess.run(["git", "commit", "-qm", "x"], cwd=self.t, check=True)
+        out = self.adopt(ok=False)
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("workflow/workflow.toml", out.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.t, "project.toml")))
+        os.remove(os.path.join(self.t, "workflow/workflow.toml"))
+        dirty = self.adopt(ok=False)
+        self.assertIn("uncommitted changes", dirty.stderr)
+        self.adopt("--allow-dirty")
+        self.assertIn("already uses the workflow", self.adopt("--allow-dirty", ok=False).stderr)
+
+
+# one minimal fixture per kind of software: (files, expected type signal, expected stack test command or "")
+KINDS = {
+    "legacy web frontend": ({"bower.json": "{}", "Gruntfile.js": "", "app/index.html": "", "app/scripts/app.js": "x\n"}, "Web frontend", ""),
+    "backend on any cloud": ({"go.mod": "module x\n", "cmd/api/main.go": "package main\n", "template.yaml": "",
+                              "infra/main.tf": "", "api/openapi.yaml": ""}, "Service / backend", "go test ./..."),
+    "android app": ({"settings.gradle": "", "build.gradle": "", "gradlew": "", "app/build.gradle": "apply plugin: 'com.android.application'\n",
+                     "app/src/main/AndroidManifest.xml": "", "app/src/main/java/x/MainActivity.kt": "class A\n",
+                     "app/src/androidTest/java/x/ATest.kt": ""}, "Mobile — Android", "./gradlew test"),
+    "ios app": ({"Shop.xcodeproj/project.pbxproj": "", "Shop/AppDelegate.swift": "class A {}\n", "Shop/Info.plist": "",
+                 "ShopTests/ShopTests.swift": "", "fastlane/Fastfile": ""}, "Mobile / desktop — Apple (Xcode)", ""),
+    "flutter app": ({"pubspec.yaml": "dependencies:\n  flutter:\n", "lib/main.dart": "void main() {}\n",
+                     "test/widget_test.dart": ""}, "Mobile — cross-platform", "flutter test"),
+    "desktop app": ({"package.json": '{"scripts": {"test": "jest"}}', "electron-builder.yml": "", "src/main.js": "x\n",
+                     "installer/setup.iss": ""}, "Desktop", "npm test"),
+    "qt desktop": ({"CMakeLists.txt": "", "src/mainwindow.ui": "", "src/main.cpp": "int main(){}\n", "resources.qrc": ""},
+                   "Desktop", "ctest --test-dir build"),
+    "unity game": ({"ProjectSettings/ProjectVersion.txt": "", "Assets/Scenes/Main.unity": "", "Assets/Scripts/Player.cs": "class P {}\n"},
+                   "Game", ""),
+    "firmware": ({"platformio.ini": "", "src/main.cpp": "void setup(){}\n", "include/board.h": ""}, "Embedded / firmware / hardware", "pio test"),
+    "library": ({"pyproject.toml": "[tool.pytest]\n", "src/lib/__init__.py": "x = 1\n", "MANIFEST.in": "", "tests/test_lib.py": ""},
+                "Library / package", "pytest"),
+    "cli": ({"Cargo.toml": "", "src/main.rs": "fn main(){}\n"}, "", "cargo test"),
+    "data pipeline": ({"dbt_project.yml": "", "models/orders.sql": "select 1\n", "notebooks/explore.ipynb": "{}"},
+                      "Data / ML / analytics", ""),
+    "infrastructure only": ({"main.tf": "", "modules/net/main.tf": "", "Pulumi.yaml": ""}, "Infrastructure / platform code", ""),
+    "browser extension": ({"manifest.json": "{}", "background.js": "x\n", "popup.html": ""}, "Extension / plugin / app manifest", ""),
+    "mainframe": ({"src/PAYROLL.cbl": "IDENTIFICATION DIVISION.\n", "jcl/RUN.jcl": ""}, "Enterprise platform", ""),
+}
+
+
+class SoftwareKindsTest(unittest.TestCase):
+    """The repository map and the stack guess make no assumption on the kind of software."""
+
+    def test_each_kind_is_recognised_and_mapped(self):
+        import repo_map
+        for kind, (files, label, test_cmd) in KINDS.items():
+            with self.subTest(kind=kind):
+                d = tempfile.mkdtemp(prefix="kind-")
+                try:
+                    for p, body in files.items():
+                        full = os.path.join(d, p)
+                        os.makedirs(os.path.dirname(full), exist_ok=True)
+                        with open(full, "w", encoding="utf-8") as f:
+                            f.write(body)
+                    found = repo_map.signals(repo_map.codebase(d)[0]).get("type", {})
+                    if label:
+                        self.assertIn(label, found, f"{kind}: {sorted(found)}")
+                    self.assertEqual(repo_map.detect_stack(d)["test"], test_cmd, kind)
+                    out = repo_map.repo_map(d)  # renders whatever the kind, with or without git
+                    self.assertIn("## Root files", out)
+                finally:
+                    shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

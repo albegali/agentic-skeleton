@@ -65,7 +65,7 @@ You also need someone in the **product owner** role who approves artifacts, and 
 
 ## 3. Create your project repository
 
-Pick one of three ways.
+Pick one of three ways for a new project, or Option D to bring the workflow into a codebase that already exists.
 
 ### Option A — GitHub template (recommended for teams)
 
@@ -106,13 +106,50 @@ cd ~/projects/my-project
 rm -rf .git && git init -b main && git add -A && git commit -m "chore: start from agentic-skeleton"
 ```
 
+### Option D — an existing codebase (brownfield)
+
+Any repository, any stack or age, any kind of software: web frontends and back ends on any cloud or on-prem, mobile and desktop apps, games, firmware, libraries and SDKs, CLIs, data/ML pipelines, infrastructure code, extensions, enterprise or legacy platforms, or a monorepo mixing them. The installer makes no assumption about language, framework, build tool, hosting or CI. The repository map reports *signals* for each kind (an `AndroidManifest.xml`, an `.xcodeproj`, `platformio.ini`, `*.tf`, …), and `/onboard` classifies each deliverable and adapts what it reads and documents: screens and navigation for a UI, endpoints for a service, the public API for a library, commands for a CLI, boards and protocols for firmware, and the distribution channel (stores, installers, registries, deployments, flashing). Run the installer **from the skeleton** and point it at the existing repository (commit or stash there first):
+
+```bash
+cd ~/projects/agentic-skeleton
+make adopt TARGET=../my-app ARGS="--dry-run"                      # see the plan, nothing written
+make adopt TARGET=../my-app ARGS="--name 'My App' --prefix MA"    # install
+cd ../my-app && git add -A && git diff --cached --stat             # review, then commit
+make next                                                          # → /onboard
+```
+
+What `tools/adopt.py` does, deterministically and without overwriting anything:
+
+| In the target | Effect |
+|---|---|
+| workflow files (`tools/`, `workflow/`, templates, guides, `project.toml`, `models.toml`) | copied where absent; an existing *different* file is a conflict and nothing is written (rename or move it, rerun); your READMEs are kept |
+| `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` | yours stay; a block between `<!-- agentic-workflow:begin/end -->` is appended (and kept up to date by `make agents`) |
+| `.claude/settings.json` | union of your permissions and the workflow ones |
+| `Makefile` | yours gets `include workflow.mk`; targets you already define win (`test`, `lint`, `setup`), other clashes are installed as `wf-<name>` (e.g. `make wf-check`) |
+| `project.toml` | `origin = "brownfield"`, `[stack]` guessed from the manifests when recognisable (otherwise empty), `decided = false` |
+| CI | untouched; add `python3 tools/check_workflow.py` to your pipeline if you want the gate |
+
+Not installed: the skeleton's own tests (`tools/tests`) and the installer itself.
+
+Then, in a fresh session in the target, **`/onboard`** (deep tier) documents the system *as it is*, from a cheap repository map (`python3 tools/context.py --repo-map`) and a selective read of the code, plus one short interview round for what the code cannot tell:
+
+- `reference/architecture/architecture.md` (current state) and **retroactive ADRs** for the decisions already in the code;
+- an `AGENTS.md` per package with the conventions actually in use;
+- an **FR index** in `functional-requirements.md`: one `### FR-xx` per existing capability (`Status: existing`, where it lives in the code); full statements are written later, when a story changes that capability;
+- `project-summary.md`, `glossary.md`, a `vision.md` of the current product and its direction;
+- `project-journal/context/<date>-onboard.md`: gaps, tech debt, risks, candidate work.
+
+You approve them like any inception artifact (vision, FR index, architecture, ADRs, `decided = true`); `make next` then goes to `/backlog` with your change requests, `/release-plan`, and the normal story loop. No walking skeleton: the system already runs.
+
 ### Verify
 
 ```bash
 make check        # → OK
 make test-tools   # → OK
-make next         # → Recommended step: kickoff
+make next         # → Recommended step: kickoff   (Option D: onboard)
 ```
+
+For Option D run `make check` and `make next` in the target (there is no `make test-tools` there).
 
 ---
 
@@ -456,6 +493,8 @@ Resolve generated files by running `make agents` rather than merging them by han
 | Symptom | Cause / fix |
 |---|---|
 | `make next` keeps saying `kickoff` | `project.toml` has `initialized = false` or `vision.md` is missing: run `/kickoff` or `tools/init_project.py` |
+| `make adopt`: "Conflicts — nothing written" | the target has its own file at a workflow path (e.g. `workflow/workflow.toml`): rename or move it, rerun |
+| `make check` in an adopted repo runs your own `check` | your Makefile defines `check`: the workflow one is `make wf-check` (same for `next`, `backlog`, …) |
 | `make next` stuck on `approve` | it lists the files still in draft; for the architecture, also check ADR statuses and `[stack] decided = true` |
 | `make next` says "plan completed or dependencies open" | the stories left in the sprint wait for open dependencies; check `python3 tools/next_step.py <ID>` |
 | A story never appears in `make next` | it is not in any sprint of `PLAN.md`, or the row doesn't match the 4-column shape |
@@ -474,7 +513,7 @@ Resolve generated files by running `make agents` rather than merging them by han
 ## 14. FAQ
 
 **Do I have to do the whole inception?**
-No, but `make next` follows it in order. For a small project, keep each artifact short. For an existing project, write the artifacts by hand with `status: approved` and let the agents take over from the backlog.
+No, but `make next` follows it in order. For a small project, keep each artifact short. For an existing codebase use §3 Option D: `make adopt` + `/onboard` replace kickoff → architecture.
 
 **Can I skip the Analysis/Refined Story and go straight to development?**
 Yes. Developer mode never requires a Refined Story: `/brief <ID>` works from the Story alone. The analysis is there to cut ambiguity before you pay for code.

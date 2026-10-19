@@ -6,8 +6,8 @@ Usage:
   python3 tools/next_step.py PR0101     # state of one story
   python3 tools/next_step.py --json     # machine output
 
-Phases: inception (project.toml → vision → requirements → mockup → architecture → backlog → PLAN.md),
-then analysis/delivery per story following the sprints of PLAN.md. Steps are defined in workflow/workflow.toml.
+Phases: inception (project.toml → vision → requirements → mockup → architecture → backlog → PLAN.md; for an existing
+codebase adopted with tools/adopt.py: project.toml → onboard → backlog → PLAN.md), then analysis/delivery per story following the sprints of PLAN.md. Steps are defined in workflow/workflow.toml.
 """
 from __future__ import annotations
 
@@ -30,14 +30,18 @@ def inception() -> dict | None:
     proj = wf.project().get("project", {})
     if not proj.get("initialized"):
         return {"step": "kickoff", "owner": "agent", "ids": [], "why": "project not initialized (project.toml)"}
-    gates = [
-        ("kickoff", ["reference/product/vision.md"]),
-        ("requirements", ["reference/product/functional-requirements.md", "reference/product/non-functional-requirements.md"]),
-    ]
-    if wf.project().get("inception", {}).get("mockup", True):
-        gates.append(("mockup", ["reference/product/mockup-reference.md"]))
+    if proj.get("origin") == "brownfield":
+        gates = [("onboard", ["reference/product/vision.md", "reference/product/functional-requirements.md",
+                              "reference/architecture/architecture.md"])]
+    else:
+        gates = [
+            ("kickoff", ["reference/product/vision.md"]),
+            ("requirements", ["reference/product/functional-requirements.md", "reference/product/non-functional-requirements.md"]),
+        ]
+        if wf.project().get("inception", {}).get("mockup", True):
+            gates.append(("mockup", ["reference/product/mockup-reference.md"]))
+        gates.append(("architecture", ["reference/architecture/architecture.md"]))
     gates += [
-        ("architecture", ["reference/architecture/architecture.md"]),
         ("backlog", ["backlog/stories.toml"]),
         ("plan", ["PLAN.md"]),
     ]
@@ -48,7 +52,7 @@ def inception() -> dict | None:
         if step == "backlog" and not wf.stories():
             return {"step": step, "owner": "agent", "ids": [], "why": "backlog/stories.toml has no stories"}
         pending = [f for f in files if (wf.artifact_status(f) or "draft") not in APPROVED]
-        if step == "architecture":
+        if step in ("architecture", "onboard"):
             pending += [wf.rel(p) for p in wf.matches("reference/architecture/ADR-*.md")
                         if (wf.front(wf.read(p), "status") or "proposed") not in APPROVED and "superseded" not in (wf.front(wf.read(p), "status") or "")]
             if not wf.project().get("stack", {}).get("decided"):
