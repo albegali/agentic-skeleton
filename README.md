@@ -12,6 +12,8 @@ Requirements: Python ≥ 3.11 (stdlib only), `make`, git.
 
 ## Quick start
 
+Full walkthrough (fork, tool setup, inception, story loop, team routines, troubleshooting): **[docs/GUIDE.md](docs/GUIDE.md)**.
+
 ```bash
 cp -r agentic-skeleton my-project && cd my-project && rm -rf .git && git init
 make next          # → /kickoff
