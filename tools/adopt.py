@@ -38,12 +38,12 @@ INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/work
            "delivery/AGENTS.md", "delivery/AGENT_GUIDE.md", "delivery/guide/*", "delivery/templates/*", "delivery/*/.gitkeep",
            "delivery/20-specs/README.md", "reference/README.md", "reference/*/.gitkeep", "reference/*/*/.gitkeep",
            "project-journal/*.md", "project-journal/*/README.md", "project-journal/templates/*", "project-journal/*/.gitkeep",
-           "project-journal/notes/current-week.md", "models.toml", "project.toml"]
+           "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json"]
 NOT_INSTALLED = {"tools/adopt.py"}  # the installer stays in the skeleton
-OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep)$")  # on conflict: keep the target's file, skip ours
+OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep|tasks\.json)$")  # on conflict: keep the target's file, skip ours
 MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json"}
 DROP_TARGETS = {"adopt", "test-tools"}  # the tools tests copy the whole repository: not for an application repo
-STACK_TARGETS = {"help", "setup", "test", "lint"}  # if the target defines them, its own version wins
+STACK_TARGETS = {"help", "setup", "test", "lint", "run"}  # if the target defines them, its own version wins
 GITIGNORE = ["__pycache__/", "*.pyc"]
 
 

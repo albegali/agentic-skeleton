@@ -75,6 +75,7 @@ tools/                    next_step, context, check_workflow, gen_backlog, rende
 | `make agents` | regenerate the tool adapters after editing `workflow/` or `models.toml` |
 | `make test-tools` | tests of the workflow tools |
 | `make setup / test / lint` | stack commands from `project.toml [stack]` |
+| `make run` | start the app locally and open it in the browser (`[stack] run` / `url`) |
 | `make codex-prompts` | link the Codex prompts into `~/.codex/prompts` |
 | `make adopt TARGET=<repo>` | install the workflow into an existing repository (run from the skeleton; `ARGS="--dry-run"` first) |
 

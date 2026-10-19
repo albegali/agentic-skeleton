@@ -45,7 +45,7 @@ Every artifact is a draft (`status: draft`, ADRs `status: proposed`), in the pro
   ```
   No `Priority` (existing capabilities are not backlog). Full statements and acceptance hints are written later, when a story changes that FR.
 - `reference/project-summary.md` (≤ 60 lines; *Type and platforms* and *Stack* filled), `reference/domain/glossary.md` (domain terms from entities, enums, states, screens, commands), `reference/product/vision.md` (current product + direction from the interview; unknown sections say "unknown — to validate").
-- `project.toml` `[stack]`: confirm or correct `summary`, `setup`, `test`, `lint` guessed by `adopt.py`; fill them when empty. A command may wrap a tool, an emulator or a device runner; if a step can only be done by hand (IDE build, store upload, hardware flashing), say so in `architecture.md` §8 and leave the command empty. Do not run commands unless the user agrees. Keep `decided = false`.
+- `project.toml` `[stack]`: confirm or correct `summary`, `setup`, `test`, `lint` guessed by `adopt.py`; fill them when empty, plus `run` (start the app locally) and `url` when the app can be launched on this machine. A command may wrap a tool, an emulator or a device runner; if a step can only be done by hand (IDE build, store upload, hardware flashing), say so in `architecture.md` §8 and leave the command empty. Do not run commands unless the user agrees. Keep `decided = false`.
 - `project-journal/context/<today>-onboard.md` — deliverables and types found, what was read, gaps not analysed, tech debt and risks with paths, test/CI gaps (if a pipeline exists, where to add `python3 tools/check_workflow.py`), **candidate work** for `/backlog` (proposals only, not stories).
 
 ## 4. Rules

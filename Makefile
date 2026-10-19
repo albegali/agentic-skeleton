@@ -1,11 +1,11 @@
 # Workflow targets (stdlib Python >= 3.11, no dependencies). Stack targets read project.toml [stack].
-.PHONY: help next context check backlog agents test-tools setup test lint codex-prompts adopt
+.PHONY: help next context check backlog agents test-tools setup test lint run codex-prompts adopt
 
 PY ?= python3
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
 
 help:
-	@echo "make next | context STEP=<step> IDS='<ID…>' | check | backlog | agents | test-tools | setup | test | lint | adopt TARGET=<repo>"
+	@echo "make next | context STEP=<step> IDS='<ID…>' | check | backlog | agents | test-tools | setup | test | lint | run | adopt TARGET=<repo>"
 
 next:            ## next workflow step (deterministic)
 	@$(PY) tools/next_step.py
@@ -27,6 +27,9 @@ test-tools:      ## tests of the workflow tools
 
 setup test lint: ## stack commands, defined by /architecture in project.toml [stack]
 	@cmd="$$($(STACK) $@)"; if [ -z "$$cmd" ]; then echo "[stack] $@ not defined yet: run /architecture"; exit 1; fi; echo "$$cmd"; sh -c "$$cmd"
+
+run:             ## start the app locally and open it in the browser: project.toml [stack] run / url
+	@$(PY) tools/launch.py
 
 codex-prompts:   ## Codex CLI reads prompts from ~/.codex/prompts: link this project's prompts there
 	@mkdir -p $${CODEX_HOME:-$$HOME/.codex}/prompts; for f in .codex/prompts/*.md; do ln -sf "$$PWD/$$f" "$${CODEX_HOME:-$$HOME/.codex}/prompts/$$(basename $$f)"; done; echo "linked: /prompts:<name> in Codex (last linked project wins on name clashes)"

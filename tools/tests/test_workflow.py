@@ -355,6 +355,36 @@ LEGACY = {  # a 10-year-old AngularJS frontend, no backend, its own rules and to
 }
 
 
+class LaunchTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.r = Repo()
+        self.r.env["BROWSER"] = "true"  # webbrowser runs `true <url>`: nothing opens
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def test_run_not_defined(self):
+        out = self.r.run("tools/launch.py", ok=False)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("run not defined", out.stdout)
+
+    def test_starts_and_waits_for_url(self):
+        import socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        self.r.write("serve_once.py", "import http.server as h, sys\n"
+                     f"h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler).handle_request()\n")
+        self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" serve_once.py')
+        self.r.toml_set("project.toml", "stack", "url", f"http://127.0.0.1:{port}/")
+        out = self.r.run("tools/launch.py", "--timeout", "20")
+        self.assertIn(f"http://127.0.0.1:{port}/", out.stdout)
+
+    def test_returns_the_app_exit_code(self):
+        self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" -c "raise SystemExit(3)"')
+        self.assertEqual(self.r.run("tools/launch.py", ok=False).returncode, 3)
+
+
 class AdoptTest(unittest.TestCase):
     """tools/adopt.py on an existing repository, then the brownfield path of next_step."""
 

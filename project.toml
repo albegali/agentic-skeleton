@@ -17,9 +17,11 @@ sources = []                 # kickoff sources (brief, transcripts, notes): read
 design = ""                  # existing design or prototype: /mockup maps it instead of building a new one
 
 [stack]
-# Filled by /architecture once the ADRs are approved. Used by Makefile targets setup / test / lint.
+# Filled by /architecture once the ADRs are approved. Used by Makefile targets setup / test / lint / run.
 decided = false
 summary = ""
 setup = ""
 test = ""
 lint = ""
+run = ""                     # starts the app locally in the foreground (make run)
+url = ""                     # optional: opened in the browser once it answers

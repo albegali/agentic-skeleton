@@ -11,7 +11,7 @@
    - `reference/architecture/ADR-001-<slug>.md`… from `inception/templates/adr.md` (`status: proposed`), one decision each;
    - `reference/architecture/architecture.md` from the template: context with type and platforms, building blocks, data and persistence, integrations and interfaces (ports & adapters), security and privacy, observability, environments, testing strategy;
    - an `AGENTS.md` stub in each package directory you plan (e.g. `api/AGENTS.md`, `app/AGENTS.md`, `firmware/AGENTS.md`) with local conventions: layout, patterns, commands, test rules. **Do not scaffold code** here: the walking skeleton is the first story.
-4. Update `project.toml` `[stack]`: `summary`, `setup`, `test`, `lint` commands (they feed `make setup/test/lint`), keep `decided = false` until the ADRs are accepted.
+4. Update `project.toml` `[stack]`: `summary`, `setup`, `test`, `lint`, `run` commands and the local `url` (they feed `make setup/test/lint/run`), keep `decided = false` until the ADRs are accepted.
 5. Add to `reference/domain/glossary.md` any new term.
 
 **Chat**: decisions table (decision → choice → ADR), risks, questions (max 10 lines).

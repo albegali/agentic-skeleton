@@ -5,6 +5,7 @@ Stdlib Python ≥ 3.11, no dependencies. Every script resolves the repository ro
 | Script | Make | What |
 |---|---|---|
 | `next_step.py` | `make next` | Next step from the files: inception gates, then sprints of `PLAN.md` and the stage of each story. `--json`, or one story: `next_step.py PR0101`. |
+| `launch.py` | `make run` | Starts the app with `project.toml [stack] run`, waits for `url` to answer, opens the browser; Ctrl+C stops it (whole process group). `--no-browser`. Works without make: `python tools/launch.py`. |
 | `context.py` | `make context STEP=… IDS=…` | Context budget of a step with a token estimate: files to read, kickoff sources, only the cited FR/NFR sections and `architecture §N` sections, ADR files, other `reference/…` files cited by path, dependency excerpts, command outputs. `--index <file>` prints headings only (Markdown or HTML); `--package-rules` lists package `AGENTS.md`. |
 | `gen_backlog.py` | `make backlog` | `backlog/stories.toml` → `analysis/10-stories/`, `reference/backlog/epics/`, overview. `--deps` compact dependency list; `--csv` generic tracker import. |
 | `check_workflow.py` | `make check` | Consistency: requirements, ADRs, backlog (prefix, epics, deps, cycles, FR coverage), artifact chain, adapters freshness. |
