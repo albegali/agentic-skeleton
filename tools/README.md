@@ -5,7 +5,7 @@ Stdlib Python ≥ 3.11, no dependencies. Every script resolves the repository ro
 | Script | Make | What |
 |---|---|---|
 | `next_step.py` | `make next` | Next step from the files: inception gates, then sprints of `PLAN.md` and the stage of each story. `--json`, or one story: `next_step.py PR0101`. |
-| `context.py` | `make context STEP=… IDS=…` | Context budget of a step with a token estimate: files to read, kickoff sources, only the cited FR/NFR sections, ADR files, dependency excerpts, command outputs. `--index <file>` prints headings only (Markdown or HTML); `--package-rules` lists package `AGENTS.md`. |
+| `context.py` | `make context STEP=… IDS=…` | Context budget of a step with a token estimate: files to read, kickoff sources, only the cited FR/NFR sections and `architecture §N` sections, ADR files, other `reference/…` files cited by path, dependency excerpts, command outputs. `--index <file>` prints headings only (Markdown or HTML); `--package-rules` lists package `AGENTS.md`. |
 | `gen_backlog.py` | `make backlog` | `backlog/stories.toml` → `analysis/10-stories/`, `reference/backlog/epics/`, overview. `--deps` compact dependency list; `--csv` generic tracker import. |
 | `check_workflow.py` | `make check` | Consistency: requirements, ADRs, backlog (prefix, epics, deps, cycles, FR coverage), artifact chain, adapters freshness. |
 | `render_agents.py` | `make agents` | `workflow/workflow.toml` + `models.toml` → Claude Code / Codex / Copilot / Cursor adapters and `workflow/STEPS.md`. Files the project already owns (`CLAUDE.md`, `copilot-instructions.md`, `.claude/settings.json`) are merged, not overwritten. `--check` for CI. |
@@ -26,7 +26,7 @@ For portals, CI and agents that prefer structured output (fewer tokens than the 
 | `next_step.py <ID> --json` | `step`, `ids`, `why`, `owner`, `deps`, `deps_done` |
 | `check_workflow.py --json` | `ok`, `errors`, `warnings`, `counts`, `issues` (`level`, `area`: inception/backlog/chain/adapters, `message`); exit code as the text view |
 | `gen_backlog.py --json` | `status`, `epics`, `stories` (TOML fields + `artifacts`: paths of story/analysis/refined/brief/spec/run or null); writes nothing |
-| `context.py <step> [IDs] --json` | `step`, `tier`, `ids`, `needs_ids`, `read` (`path`, `lines`, `tokens`, `long`), `missing`, `design`, `sections`, `dependencies`, `runs`, `tokens` (estimate of the whole budget) |
+| `context.py <step> [IDs] --json` | `step`, `tier`, `ids`, `needs_ids`, `read` (`path`, `lines`, `tokens`, `long`), `missing`, `design`, `cited` (`path`, `exists`, `lines`, `tokens`, `long`), `sections` (`ref`, `file`, `text`), `dependencies`, `runs`, `tokens` (estimate of the whole budget) |
 | `context.py --index <file> --json` · `--package-rules --json` | `file`, `headings` · `rules` |
 | `repo_map.py --json` (= `context.py --repo-map --json`) | `name`, counts, `languages`, `other_types`, `signals`, `dirs`, `root_files`, `docs`, `migrations`, `entry_points`, `tests`, `source_sizes`, `git` (`commits`, `first`, `last`, `authors`, `churn_180d`) or null, `stack` |
 

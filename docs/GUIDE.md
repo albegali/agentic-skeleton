@@ -291,7 +291,7 @@ ac = [["the cloned repository", "I run `make setup && make test`", "the tests pa
 
 The agent then runs `make backlog`, which generates `analysis/10-stories/STORY_*.md`, the epic pages and the overview, and `make check`, which catches unknown FRs, dependency cycles and Must FRs no story covers.
 
-> Never hand-edit `analysis/10-stories/`: edit `stories.toml` and run `make backlog`. Stories that already have an Analysis are not overwritten.
+> Never hand-edit `analysis/10-stories/`: edit `stories.toml` and run `make backlog`. Stories are regenerated when the TOML changes; those changed after their Analysis are reported so you can align Analysis and Refined Story.
 
 **Your gate.** Set `status = "approved"` at the top of `stories.toml`.
 

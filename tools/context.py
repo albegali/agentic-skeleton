@@ -23,6 +23,9 @@ import wf  # noqa: E402
 
 REQ_FILES = {"FR": "reference/product/functional-requirements.md", "NFR": "reference/product/non-functional-requirements.md"}
 REF_RX = re.compile(r"\b(FR|NFR|ADR)-(\d+)\b")
+PATH_RX = re.compile(r"\b(reference/[\w./-]+\.md)\b")
+ARCH_RX = re.compile(r"\barchitecture(?:\.md)?\s*§\s*(\d+)")
+ARCH = "reference/architecture/architecture.md"
 BIG = 400  # lines: warn the agent to read only what it needs
 ROOT_RULES = {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}
 
@@ -117,10 +120,15 @@ def budget_data(step: str, ids: list[str]) -> dict:
 
     # cited references: only the sections
     refs: list[tuple[str, str]] = []
+    paths: list[str] = []
+    arch: list[str] = []
     for i in ids:
         for pat in cfg.get("refs_from", []):
             for p in wf.matches(expand(pat, [i])):
-                refs += refs_in(wf.read(p))
+                text = wf.read(p)
+                refs += refs_in(text)
+                paths += PATH_RX.findall(text)
+                arch += ARCH_RX.findall(text)
     sections = []
     for kind, num in dict.fromkeys(refs):
         if kind == "ADR":
@@ -130,6 +138,22 @@ def budget_data(step: str, ids: list[str]) -> dict:
         f = REQ_FILES[kind]
         sec = section(wf.read(f), rf"\b{kind}-{num}\b") if wf.exists(f) else None
         sections.append({"ref": f"{kind}-{num}", "file": f, "text": sec})
+    # files and architecture sections cited by path in the Story (e.g. notes)
+    arch = list(dict.fromkeys(arch))
+    arch_text = wf.read(ARCH) if arch and wf.exists(ARCH) else ""
+    for num in arch:
+        sections.append({"ref": f"architecture §{num}", "file": ARCH, "text": section(arch_text, rf"^#+\s+{num}\.") if arch_text else None})
+    in_read = {r["path"] for r in read}
+    cited = []
+    for p in dict.fromkeys(paths):
+        if p in in_read or (arch and p == ARCH):
+            continue
+        if not wf.exists(p):
+            cited.append({"path": p, "exists": False, "lines": 0, "tokens": 0, "long": False})
+            continue
+        t = wf.read(p)
+        n = t.count("\n") + 1
+        cited.append({"path": p, "exists": True, "lines": n, "tokens": wf.approx_tokens(len(t)), "long": n > BIG})
 
     # dependency excerpts
     excerpts = []
@@ -153,8 +177,8 @@ def budget_data(step: str, ids: list[str]) -> dict:
 
     inline = sum(len(x["text"] or "") for x in sections) + sum(len(x["text"] or "") for x in excerpts) + sum(len(x["output"]) for x in runs)
     return {"step": step, "tier": cfg.get("tier"), "ids": ids, "needs_ids": needs_id and not ids, "read": read, "missing": missing,
-            "design": design or None, "sections": sections, "dependencies": excerpts, "runs": runs,
-            "tokens": sum(x["tokens"] for x in read) + wf.approx_tokens(inline)}
+            "design": design or None, "cited": cited, "sections": sections, "dependencies": excerpts, "runs": runs,
+            "tokens": sum(x["tokens"] for x in read + cited) + wf.approx_tokens(inline)}
 
 
 def budget(step: str, ids: list[str]) -> str:
@@ -171,12 +195,17 @@ def budget(step: str, ids: list[str]) -> str:
         out += ["", "## Existing design (map it, do not rebuild it)",
                 f"- {b['design']} — read its screen list first: python3 tools/context.py --index {b['design']} (Markdown/HTML headings), "
                 "then only the parts each screen needs"]
+    if b["cited"]:
+        out += ["", "## Cited files"]
+        for c in b["cited"]:
+            out.append(f"- {c['path']}: missing" if not c["exists"] else
+                       f"- read {c['path']} ({c['lines']} lines)" + (f"  ⚠ long: `python3 tools/context.py --index {c['path']}` first" if c["long"] else ""))
     if b["missing"]:
         out += ["", "## Missing (declare as missing source if relevant)"] + [f"- {m}" for m in b["missing"]]
     if b["sections"]:
         out += ["", "## Cited references (extracted sections only)"]
         for s in b["sections"]:
-            if s["ref"].startswith("ADR"):
+            if s["ref"].startswith("ADR-"):
                 out.append(f"- {s['ref']}: " + (f"read {s['file']}" if s["file"] else "missing"))
             else:
                 out += ["", f"### {s['ref']} ({s['file']})", s["text"] or "(not found)"]

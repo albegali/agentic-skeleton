@@ -246,15 +246,39 @@ class WorkflowTest(unittest.TestCase):
         warn = r.run("tools/context.py", "analysis").stdout
         self.assertIn("needs story IDs", warn)
 
-    def test_gen_backlog_keeps_analyzed_stories(self):
+    def test_context_lists_cited_files_and_architecture_sections(self):
         r = self.r
         r.through_inception()
+        r.write("reference/architecture/architecture.md", "---\nstatus: approved\n---\n# Arch\n## 5. Security\nsec body\n## 6. Observability\nhealth body\n## 7. Build\n")
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace(
+            'ac = [["a", "b", "c"]]', 'ac = [["a", "b", "c"]]\nnotes = "Health per architecture §6. Tokens per reference/product/mockup-reference.md and reference/product/missing.md."', 1))
+        r.run("tools/gen_backlog.py")
+        out = r.run("tools/context.py", "analysis", "DM0101").stdout
+        self.assertIn("- read reference/product/mockup-reference.md (", out)
+        self.assertIn("- reference/product/missing.md: missing", out)
+        self.assertIn("### architecture §6", out)
+        self.assertIn("health body", out)
+        self.assertNotIn("sec body", out)
+
+    def test_gen_backlog_regenerates_stories_and_reports_drift(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
         r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
+        self.assertIn("Story written 0, unchanged 2", r.run("tools/gen_backlog.py").stdout)
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('title = "Walking skeleton"', 'title = "Skeleton v2"', 1)
+                .replace('title = "Export"', 'title = "Export v2"', 1))
         out = r.run("tools/gen_backlog.py").stdout
-        self.assertIn("Story written 1, skipped 1", out)
+        self.assertIn("Story written 2, unchanged 0", out)
+        self.assertIn("Changed after Analysis (align Analysis/Refined Story): DM0101\n", out)
+        self.assertIn("# Skeleton v2", r.read("analysis/10-stories/STORY_DM0101_walking_skeleton.md"))
+        r.write("analysis/10-stories/STORY_DM0102_export.md", "# Hand-written story\n")
+        out = r.run("tools/gen_backlog.py").stdout
+        self.assertIn("hand-written, not overwritten: DM0102", out)
+        self.assertEqual("# Hand-written story\n", r.read("analysis/10-stories/STORY_DM0102_export.md"))
         self.assertIn("| DM0101 |", r.read("analysis/output/consolidated/backlog_overview.md"))
         deps = r.run("tools/gen_backlog.py", "--deps").stdout
-        self.assertIn("DM0102 [EP-01 Should S ] Export ← DM0101", deps)
+        self.assertIn("DM0102 [EP-01 Should S ] Export v2 ← DM0101", deps)
 
     def test_kickoff_sources_and_design_reach_the_budgets(self):
         r = self.r
