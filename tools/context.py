@@ -21,6 +21,9 @@ import wf  # noqa: E402
 
 REQ_FILES = {"FR": "reference/product/functional-requirements.md", "NFR": "reference/product/non-functional-requirements.md"}
 REF_RX = re.compile(r"\b(FR|NFR|ADR)-(\d+)\b")
+PATH_RX = re.compile(r"\b(reference/[\w./-]+\.md)\b")
+ARCH_RX = re.compile(r"\barchitecture(?:\.md)?\s*§\s*(\d+)")
+ARCH = "reference/architecture/architecture.md"
 BIG = 400  # lines: warn the agent to read only what it needs
 ROOT_RULES = {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}
 
@@ -105,11 +108,31 @@ def budget(step: str, ids: list[str]) -> str:
 
     # cited references: only the sections
     refs: list[tuple[str, str]] = []
+    paths: list[str] = []
+    arch: list[str] = []
     for i in ids:
         for pat in cfg.get("refs_from", []):
             for p in wf.matches(expand(pat, [i])):
-                refs += refs_in(wf.read(p))
+                text = wf.read(p)
+                refs += refs_in(text)
+                paths += PATH_RX.findall(text)
+                arch += ARCH_RX.findall(text)
     refs = list(dict.fromkeys(refs))
+    arch = list(dict.fromkeys(arch))
+    paths = [p for p in dict.fromkeys(paths) if p not in {wf.rel(f) for f in full} and not (arch and p == ARCH)]
+    if paths:
+        out += ["", "## Cited files"]
+        for p in paths:
+            if not wf.exists(p):
+                out.append(f"- {p}: missing")
+                continue
+            n = wf.read(p).count("\n") + 1
+            out.append(f"- read {p} ({n} lines)" + (f"  ⚠ long: `python3 tools/context.py --index {p}` first" if n > BIG else ""))
+    if arch:
+        text = wf.read(ARCH) if wf.exists(ARCH) else ""
+        for num in arch:
+            sec = section(text, rf"^#+\s+{num}\.") if text else None
+            out += ["", f"### architecture §{num} ({ARCH})", sec or "(not found)"]
     if refs:
         out += ["", "## Cited references (extracted sections only)"]
         for kind, num in refs:
