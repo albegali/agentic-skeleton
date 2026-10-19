@@ -190,7 +190,7 @@ Run `make next` (or `/next`) after each step; it never skips a gate.
 
 The agent:
 1. asks, in one message, only what the arguments and sources don't say: name, description, **ID prefix** (2–3 letters, e.g. `CP`), **artifact language** (`en` by default; for example `it`), **owner**, mockup on/off, tools in use;
-2. runs `tools/init_project.py`, which updates `project.toml` and `models.toml`, re-prefixes the template examples and regenerates the adapters;
+2. runs `tools/init_project.py`, which updates `project.toml` and `models.toml`, records the source files (and which one is an existing design, if any) so later steps load them without you passing them again, re-prefixes the template examples and regenerates the adapters;
 3. runs a short interview (at most 2 rounds) about problem, users, outcomes, scope, constraints and stakeholders;
 4. writes `reference/product/vision.md`, `reference/project-summary.md`, `reference/documentation/stakeholders.md`, `reference/domain/glossary.md`, and a kickoff record in `project-journal/context/`.
 
@@ -242,6 +242,8 @@ IDs are stable: they are never renumbered or reused. The headings matter: `conte
 ```
 
 Output: one self-contained HTML file in `reference/mockup/` (open it in a browser) and `reference/product/mockup-reference.md`, which maps screens and render functions to FRs and separates normative from illustrative behavior.
+
+Already have a design (an HTML mockup, a prototype, exported frames)? Pass it to `/kickoff` among the sources: it is recorded as `design` in `project.toml`, and `/mockup` maps it to the FRs instead of building a new one, adding screens only for requirements the design does not cover.
 
 Use the mockup with stakeholders: their feedback is the best input for refining requirements. **Your gate:** approve the map.
 

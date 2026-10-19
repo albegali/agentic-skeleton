@@ -5,6 +5,7 @@ The repository root is the parent of tools/, or $WF_ROOT when set (used by the t
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
 import tomllib
@@ -12,6 +13,7 @@ from functools import lru_cache
 
 ROOT = os.path.abspath(os.environ.get("WF_ROOT") or os.path.join(os.path.dirname(__file__), ".."))
 TIERS = ("fast", "balanced", "deep")
+SCHEMA = 1  # version of the --json outputs (tools/README.md "JSON contract"); bump on breaking changes only
 
 
 def path(*p: str) -> str:
@@ -47,6 +49,16 @@ def one(pattern: str) -> str | None:
     return m[0] if m else None
 
 
+def dump_json(obj: dict) -> None:
+    """Print a --json result: {"schema": SCHEMA, **obj}, compact (machines read it, agents read fewer tokens)."""
+    print(json.dumps({"schema": SCHEMA, **obj}, ensure_ascii=False, separators=(",", ":")))
+
+
+def approx_tokens(chars: int) -> int:
+    """Rough token estimate (≈ 4 characters per token) for context budgets."""
+    return (chars + 3) // 4
+
+
 def load_toml(p: str) -> dict:
     if not exists(p):
         return {}
@@ -76,6 +88,16 @@ def backlog() -> dict:
 
 def prefix() -> str:
     return project().get("project", {}).get("id_prefix", "PR")
+
+
+def sources() -> list[str]:
+    """Kickoff sources recorded in project.toml [inception] sources (paths relative to the root)."""
+    return list(project().get("inception", {}).get("sources", []))
+
+
+def design() -> str:
+    """Existing design (prototype, HTML mockup, exported frames) recorded in project.toml [inception] design."""
+    return project().get("inception", {}).get("design", "")
 
 
 def id_rx() -> str:

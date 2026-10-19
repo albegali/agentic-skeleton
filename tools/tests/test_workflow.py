@@ -256,6 +256,56 @@ class WorkflowTest(unittest.TestCase):
         deps = r.run("tools/gen_backlog.py", "--deps").stdout
         self.assertIn("DM0102 [EP-01 Should S ] Export ← DM0101", deps)
 
+    def test_kickoff_sources_and_design_reach_the_budgets(self):
+        r = self.r
+        r.write("docs/brief.md", "# Brief\nWhy now.\n")
+        r.write("docs/proto.html", "<title>Proto</title><h1>Home</h1><div><h2>Orders <b>list</b></h2></div>")
+        r.run("tools/init_project.py", "--name", "Demo", "--prefix", "DM", "--sources", "docs/brief.md", "docs/proto.html",
+              "--design", "docs/proto.html")
+        p = r.read("project.toml")
+        self.assertIn('sources = ["docs/brief.md"]', p)
+        self.assertIn('design = "docs/proto.html"', p)
+        self.assertIn("# kickoff sources", p)  # comment kept
+        req = r.run("tools/context.py", "requirements").stdout
+        self.assertIn("- docs/brief.md (", req)
+        self.assertNotIn("proto.html", req)
+        mock = json.loads(r.run("tools/context.py", "mockup", "--json").stdout)
+        self.assertEqual(mock["design"], "docs/proto.html")
+        self.assertIn("docs/brief.md", [x["path"] for x in mock["read"]])
+        self.assertGreater(mock["tokens"], 0)
+        self.assertEqual(r.run("tools/context.py", "--index", "docs/proto.html").stdout.split("\n")[:3],
+                         ["title: Proto", "# Home", "## Orders list"])
+        os.remove(os.path.join(r.dir, "docs/brief.md"))
+        self.assertIn("source not found: docs/brief.md", r.run("tools/check_workflow.py").stdout)
+        self.assertNotEqual(r.run("tools/init_project.py", "--name", "x", "--prefix", "DM", "--sources", "nope.md", ok=False).returncode, 0)
+
+    def test_json_contract(self):
+        r = self.r
+        r.through_inception()
+        r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
+        n = r.next()
+        self.assertEqual(n["schema"], 1)
+        self.assertEqual({s["id"]: s["stage"] for s in n["stories"]}, {"DM0101": "workshop", "DM0102": "analysis"})
+        chk = json.loads(r.run("tools/check_workflow.py", "--json").stdout)
+        self.assertTrue(chk["ok"])
+        self.assertEqual(chk["counts"]["stories"], 2)
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('fr = ["FR-02"]', 'fr = ["FR-09"]'))
+        bad = r.run("tools/check_workflow.py", "--json", ok=False)
+        self.assertEqual(bad.returncode, 1)
+        self.assertIn({"level": "error", "area": "backlog", "message": "DM0102: unknown FR-09"}, json.loads(bad.stdout)["issues"])
+        bl = json.loads(r.run("tools/gen_backlog.py", "--json").stdout)
+        self.assertEqual(bl["stories"][0]["artifacts"]["analysis"], "analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md")
+        self.assertIsNone(bl["stories"][1]["artifacts"]["spec"])
+        self.assertFalse(os.path.exists(os.path.join(r.dir, "analysis/10-stories/STORY_DM0102_export.md")))  # --json writes nothing
+        r.write("backlog/stories.toml", STORIES.format(st="approved"))
+        r.run("tools/gen_backlog.py")
+        ctx = json.loads(r.run("tools/context.py", "analysis", "DM0102", "--json").stdout)
+        self.assertEqual([s["ref"] for s in ctx["sections"]], ["FR-02"])
+        self.assertEqual(ctx["dependencies"][0]["id"], "DM0101")
+        rm = json.loads(r.run("tools/context.py", "--repo-map", "--json").stdout)
+        self.assertIn("tools/wf.py", rm["source_sizes"])
+        self.assertIn("languages", rm)
+
     def test_rename_id(self):
         r = self.r
         r.through_inception()

@@ -4,7 +4,7 @@
 Usage:
   python3 tools/next_step.py            # full view + recommended step
   python3 tools/next_step.py PR0101     # state of one story
-  python3 tools/next_step.py --json     # machine output
+  python3 tools/next_step.py --json     # machine output (+ stage of every story in delivery)
 
 Phases: inception (project.toml → vision → requirements → mockup → architecture → backlog → PLAN.md; for an existing
 codebase adopted with tools/adopt.py: project.toml → onboard → backlog → PLAN.md), then analysis/delivery per story following the sprints of PLAN.md. Steps are defined in workflow/workflow.toml.
@@ -12,7 +12,6 @@ codebase adopted with tools/adopt.py: project.toml → onboard → backlog → P
 from __future__ import annotations
 
 import datetime as dt
-import json
 import os
 import re
 import sys
@@ -188,7 +187,7 @@ def main() -> None:
         stg, det, own = stage(i)
         res = {"step": stg, "ids": [i], "why": det, "owner": own, "deps": st[i].get("deps", []), "deps_done": deps_done(i)}
         if as_json:
-            print(json.dumps(res, ensure_ascii=False, indent=1))
+            wf.dump_json(res)
         else:
             print(f"{i} — {st[i].get('title', '')}\n  stage: {stg} ({own}) · {det}\n"
                   f"  dependencies: {', '.join(res['deps']) or '—'} (closed: {res['deps_done']})\n  next: {command_for(stg, [i])}")
@@ -210,7 +209,9 @@ def main() -> None:
         out["current_sprint"] = rec["current"]["sprint"] if rec.get("current") else None
         out["next_sprint"] = rec["next_sprint"]["sprint"] if rec.get("next_sprint") else None
         out["human_gates"] = [{"id": i, "stage": s[0], "detail": s[1]} for i, s in rec.get("human_gates", [])]
-        print(json.dumps(out, ensure_ascii=False, indent=1))
+        if phase == "delivery":  # every story of the backlog, for boards and dashboards
+            out["stories"] = [{"id": i, "stage": g[0], "detail": g[1], "owner": g[2]} for i in wf.stories() for g in [stage(i)]]
+        wf.dump_json(out)
         return
 
     if phase == "inception":

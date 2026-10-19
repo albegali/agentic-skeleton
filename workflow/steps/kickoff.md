@@ -12,7 +12,8 @@
    - product owner name (the human approver);
    - include the mockup step? (default yes for products with a UI);
    - which agent tools the team uses (Claude Code, Codex CLI, Copilot, Cursor).
-   Then run `python3 tools/init_project.py --name … --prefix … --language … --owner … [--no-mockup] [--tools claude-code,codex,…]`.
+   Then run `python3 tools/init_project.py --name … --prefix … --language … --owner … [--no-mockup] [--tools claude-code,codex,…] [--sources <files>] [--design <file>]`.
+   `--sources` records the source files passed as arguments so `/requirements`, `/mockup` and `/architecture` load them automatically; `--design` marks the one that is an existing design (HTML mockup, prototype, exported frames): `/mockup` will map it instead of building a new one.
 2. **Interview** (max 2 rounds, grouped questions). Cover: problem and why now; type of software and target platforms (web, mobile, desktop, embedded, library, CLI, data, …); target users and their jobs; desired outcomes and success metrics; scope boundaries (in / out / later); constraints (deadlines, budget, regulations, systems to integrate, data sensitivity); key stakeholders and decision makers. Prefer what the sources already say; ask only for gaps.
 3. **Write** from `inception/templates/`:
    - `reference/product/vision.md` (frontmatter `status: draft`);

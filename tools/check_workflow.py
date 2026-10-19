@@ -5,6 +5,7 @@ Inception: unique FR/NFR IDs; ADR numbering; mockup map cites existing FRs.
 Backlog:   story IDs match project.toml prefix; epics exist; deps exist and are acyclic; FR/NFR links exist; Must FRs covered.
 Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution; Persisted before Closed.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
+--json:    {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]} (same exit code).
 """
 from __future__ import annotations
 
@@ -50,6 +51,9 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
             E.append(f"ADR naming (ADR-NNN-slug.md): {a}")
     if len(nums) != len(set(nums)):
         E.append("ADR numbers duplicated")
+    for src in wf.sources() + ([wf.design()] if wf.design() else []):
+        if not wf.exists(src):
+            W.append(f"project.toml [inception] source not found: {src}")
     mref = "reference/product/mockup-reference.md"
     if wf.exists(mref) and fr:
         for x in sorted(set(re.findall(r"\bFR-\d+\b", wf.read(mref))) - set(fr)):
@@ -166,14 +170,25 @@ def check_adapters() -> None:
 
 
 def main() -> None:
+    issues: list[dict] = []
+
+    def tag(area: str, ne: int, nw: int) -> None:
+        issues.extend([{"level": "error", "area": area, "message": m} for m in E[ne:]]
+                      + [{"level": "warning", "area": area, "message": m} for m in W[nw:]])
+
     fr, nfr, prio = check_inception()
-    check_backlog(fr, nfr, prio)
-    check_chain()
-    check_adapters()
+    tag("inception", 0, 0)
+    for area, fn in (("backlog", lambda: check_backlog(fr, nfr, prio)), ("chain", check_chain), ("adapters", check_adapters)):
+        ne, nw = len(E), len(W)
+        fn()
+        tag(area, ne, nw)
     counts = {"FR": len(fr), "NFR": len(nfr), "ADR": len(wf.matches("reference/architecture/ADR-*.md")), "stories": len(wf.stories()),
               "Analysis": len(wf.matches("analysis/20-analysis/ANALYSIS_*.md")), "Refined Story": len(wf.matches("analysis/30-refined/REFINED_*.md")),
               "Brief": len(wf.matches("delivery/10-briefs/BRIEF-*.md")), "Spec": len(wf.matches("delivery/20-specs/SPEC-*.md")),
               "RUN": len(wf.matches("delivery/30-runs/RUN-*.md"))}
+    if "--json" in sys.argv:
+        wf.dump_json({"ok": not E, "errors": len(E), "warnings": len(W), "counts": counts, "issues": issues})
+        sys.exit(1 if E else 0)
     print(" · ".join(f"{k} {v}" for k, v in counts.items()))
     for w in W:
         print("WARN ", w)

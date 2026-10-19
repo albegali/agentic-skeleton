@@ -6,8 +6,10 @@ Usage:
   python3 tools/context.py --index <file.md>   # headings only (cheap table of contents)
   python3 tools/context.py --package-rules     # package-level AGENTS.md files
   python3 tools/context.py --repo-map          # map of an existing codebase (tools/repo_map.py)
+  add --json to any form for machine output (schema in tools/README.md)
 
-Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run, run_max).
+Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run, run_max, sources, design).
+`sources = true` adds the kickoff sources of project.toml [inception]; `design = true` points to the existing design.
 """
 from __future__ import annotations
 
@@ -47,7 +49,15 @@ def tail_from(text: str, num: str) -> str | None:
 def index(p: str) -> str:
     if not wf.exists(p):
         return f"(missing: {p})"
-    return "\n".join(line for line in wf.read(p).splitlines() if re.match(r"^#{1,4}\s", line))
+    t = wf.read(p)
+    if p.lower().endswith((".html", ".htm")):  # mockups, prototypes: <title> and h1–h3 as an outline
+        out = []
+        for lvl, body in re.findall(r"<(title|h[1-3])\b[^>]*>(.*?)</\1>", t, re.S | re.I):
+            txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", body)).strip()
+            if txt:
+                out.append(("#" * int(lvl[1]) if lvl.lower() != "title" else "title:") + " " + txt)
+        return "\n".join(out)
+    return "\n".join(line for line in t.splitlines() if re.match(r"^#{1,4}\s", line))
 
 
 def package_rules() -> list[str]:
@@ -70,18 +80,15 @@ def expand(pattern: str, ids: list[str], dep: str | None = None) -> str:
     return pattern.replace("{ID}", ids[0] if ids else "*").replace("{DEP}", dep or "*")
 
 
-def budget(step: str, ids: list[str]) -> str:
+def budget_data(step: str, ids: list[str]) -> dict:
+    """The context budget as data: files to read in full, cited sections, dependency excerpts, command outputs."""
     cfg = wf.workflow().get("steps", {}).get(step)
     if cfg is None:
         sys.exit(f"Unknown step: {step}. Steps: {', '.join(wf.workflow().get('steps', {}))}")
     ids = ids or []
-    out = [f"# Context budget — step '{step}' · tier {cfg.get('tier', '—')}" + (f" · IDs {' '.join(ids)}" if ids else ""),
-           f"Step file: workflow/steps/{step}.md. Read ONLY what follows; for anything else, ask or grep a specific symbol.", ""]
     full: list[str] = []
     missing: list[str] = []
     needs_id = any("{ID}" in p for k in ("read", "first", "refs_from") for p in cfg.get(k, []))
-    if needs_id and not ids:
-        out += [f"⚠ step '{step}' needs story IDs: python3 tools/context.py {step} <ID…>", ""]
     for i in ids or [None]:
         cur = [i] if i else []
         for pat in cfg.get("read", []):
@@ -93,15 +100,20 @@ def budget(step: str, ids: list[str]) -> str:
         if alts and i:
             hit = next((wf.matches(expand(a, cur)) for a in alts if wf.matches(expand(a, cur))), None)
             full.extend(hit[:1]) if hit else missing.append(" | ".join(expand(a, cur) for a in alts))
+    # kickoff sources and existing design recorded in project.toml [inception]
+    if cfg.get("sources"):
+        for p in wf.sources():
+            (full.append(wf.path(p)) if wf.exists(p) else missing.append(p))
+    design = wf.design() if cfg.get("design") else ""
+    if design and not wf.exists(design):
+        missing.append(design)
     full = list(dict.fromkeys(full))
     missing = list(dict.fromkeys(missing))
-
-    out.append("## Read in full")
+    read = []
     for p in full:
-        n = wf.read(p).count("\n") + 1
-        out.append(f"- {wf.rel(p)} ({n} lines){'  ⚠ long: read only the sections you need' if n > BIG else ''}")
-    if missing:
-        out += ["", "## Missing (declare as missing source if relevant)"] + [f"- {m}" for m in missing]
+        t = wf.read(p)
+        n = t.count("\n") + 1
+        read.append({"path": wf.rel(p), "lines": n, "tokens": wf.approx_tokens(len(t)), "long": n > BIG})
 
     # cited references: only the sections
     refs: list[tuple[str, str]] = []
@@ -109,57 +121,102 @@ def budget(step: str, ids: list[str]) -> str:
         for pat in cfg.get("refs_from", []):
             for p in wf.matches(expand(pat, [i])):
                 refs += refs_in(wf.read(p))
-    refs = list(dict.fromkeys(refs))
-    if refs:
-        out += ["", "## Cited references (extracted sections only)"]
-        for kind, num in refs:
-            if kind == "ADR":
-                hit = wf.matches(f"reference/architecture/ADR-{int(num):03d}*.md") or wf.matches(f"reference/architecture/ADR-{num}*.md")
-                out.append(f"- ADR-{num}: " + (f"read {wf.rel(hit[0])}" if hit else "missing"))
-                continue
-            f = REQ_FILES[kind]
-            sec = section(wf.read(f), rf"\b{kind}-{num}\b") if wf.exists(f) else None
-            out += ["", f"### {kind}-{num} ({f})", sec or "(not found)"]
+    sections = []
+    for kind, num in dict.fromkeys(refs):
+        if kind == "ADR":
+            hit = wf.matches(f"reference/architecture/ADR-{int(num):03d}*.md") or wf.matches(f"reference/architecture/ADR-{num}*.md")
+            sections.append({"ref": f"ADR-{num}", "file": wf.rel(hit[0]) if hit else None, "text": None})
+            continue
+        f = REQ_FILES[kind]
+        sec = section(wf.read(f), rf"\b{kind}-{num}\b") if wf.exists(f) else None
+        sections.append({"ref": f"{kind}-{num}", "file": f, "text": sec})
 
     # dependency excerpts
+    excerpts = []
     deps_cfg = cfg.get("deps", [])
     if deps_cfg and ids:
         st = wf.stories()
-        deps = list(dict.fromkeys(d for i in ids for d in st.get(i, {}).get("deps", [])))
-        for d in deps:
+        for d in dict.fromkeys(d for i in ids for d in st.get(i, {}).get("deps", [])):
             for pat in deps_cfg:
                 file_pat, _, num = pat.partition("#")
                 hit = wf.matches(expand(file_pat, ids, d))
                 if hit:
                     exc = tail_from(wf.read(hit[0]), num) if num else wf.read(hit[0])
-                    out += ["", f"### Dependency {d} — {wf.rel(hit[0])}" + (f" §{num}+" if num else ""), exc or "(section not found)"]
+                    excerpts.append({"id": d, "file": wf.rel(hit[0]), "from": num or None, "text": exc})
 
     cap = cfg.get("run_max", 80)
+    runs = []
     for cmd in cfg.get("run", []):
         res = subprocess.run(cmd, shell=True, cwd=wf.ROOT, capture_output=True, text=True)
-        body = (res.stdout + res.stderr).strip()
-        lines = body.splitlines()
-        if len(lines) > cap:
-            body = "\n".join(lines[:cap] + [f"… ({len(lines) - cap} more lines)"])
-        out += ["", f"## $ {cmd}", body or "(no output)"]
+        lines = (res.stdout + res.stderr).strip().splitlines()
+        runs.append({"cmd": cmd, "output": "\n".join(lines[:cap]), "truncated": max(0, len(lines) - cap)})
+
+    inline = sum(len(x["text"] or "") for x in sections) + sum(len(x["text"] or "") for x in excerpts) + sum(len(x["output"]) for x in runs)
+    return {"step": step, "tier": cfg.get("tier"), "ids": ids, "needs_ids": needs_id and not ids, "read": read, "missing": missing,
+            "design": design or None, "sections": sections, "dependencies": excerpts, "runs": runs,
+            "tokens": sum(x["tokens"] for x in read) + wf.approx_tokens(inline)}
+
+
+def budget(step: str, ids: list[str]) -> str:
+    b = budget_data(step, ids)
+    out = [f"# Context budget — step '{step}' · tier {b['tier'] or '—'}" + (f" · IDs {' '.join(ids)}" if ids else "")
+           + f" · ≈{b['tokens']:,} tokens",
+           f"Step file: workflow/steps/{step}.md. Read ONLY what follows; for anything else, ask or grep a specific symbol.", ""]
+    if b["needs_ids"]:
+        out += [f"⚠ step '{step}' needs story IDs: python3 tools/context.py {step} <ID…>", ""]
+    out.append("## Read in full")
+    for r in b["read"]:
+        out.append(f"- {r['path']} ({r['lines']} lines){'  ⚠ long: read only the sections you need' if r['long'] else ''}")
+    if b["design"]:
+        out += ["", "## Existing design (map it, do not rebuild it)",
+                f"- {b['design']} — read its screen list first: python3 tools/context.py --index {b['design']} (Markdown/HTML headings), "
+                "then only the parts each screen needs"]
+    if b["missing"]:
+        out += ["", "## Missing (declare as missing source if relevant)"] + [f"- {m}" for m in b["missing"]]
+    if b["sections"]:
+        out += ["", "## Cited references (extracted sections only)"]
+        for s in b["sections"]:
+            if s["ref"].startswith("ADR"):
+                out.append(f"- {s['ref']}: " + (f"read {s['file']}" if s["file"] else "missing"))
+            else:
+                out += ["", f"### {s['ref']} ({s['file']})", s["text"] or "(not found)"]
+    for d in b["dependencies"]:
+        out += ["", f"### Dependency {d['id']} — {d['file']}" + (f" §{d['from']}+" if d["from"] else ""), d["text"] or "(section not found)"]
+    for r in b["runs"]:
+        body = r["output"] + (f"\n… ({r['truncated']} more lines)" if r["truncated"] else "")
+        out += ["", f"## $ {r['cmd']}", body or "(no output)"]
     return "\n".join(out)
 
 
 def main() -> None:
-    a = sys.argv[1:]
+    a = [x for x in sys.argv[1:] if x != "--json"]
+    as_json = "--json" in sys.argv
     if not a or a[0] in ("-h", "--help"):
         print(__doc__)
         return
     if a[0] == "--index":
-        print(index(a[1]))
+        if as_json:
+            wf.dump_json({"file": a[1], "headings": index(a[1]).splitlines()})
+        else:
+            print(index(a[1]))
     elif a[0] == "--package-rules":
         rules = package_rules()
-        print("Package rules (read those of the packages you touch):\n" + "\n".join(f"- {r}" for r in rules) if rules else "No package AGENTS.md yet.")
+        if as_json:
+            wf.dump_json({"rules": rules})
+        else:
+            print("Package rules (read those of the packages you touch):\n" + "\n".join(f"- {r}" for r in rules) if rules else "No package AGENTS.md yet.")
     elif a[0] == "--repo-map":
         import repo_map
-        print(repo_map.repo_map())
+        if as_json:
+            wf.dump_json(repo_map.repo_data())
+        else:
+            print(repo_map.repo_map())
     else:
-        print(budget(a[0], [x.replace("-", "") if re.fullmatch(r"[A-Z]+-?\d{4}", x) else x for x in a[1:]]))
+        ids = [x.replace("-", "") if re.fullmatch(r"[A-Z]+-?\d{4}", x) else x for x in a[1:]]
+        if as_json:
+            wf.dump_json(budget_data(a[0], ids))
+        else:
+            print(budget(a[0], ids))
 
 
 if __name__ == "__main__":

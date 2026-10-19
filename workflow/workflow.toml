@@ -10,6 +10,8 @@
 #   run       commands whose output is part of the context
 #   first     alternatives: the first pattern that matches wins (e.g. Refined Story, else Analysis, else Story)
 #   run_max   max lines printed per `run` command (default 80)
+#   sources   true: add the kickoff sources recorded in project.toml [inception] sources
+#   design    true: point to the existing design in project.toml [inception] design (outline, not the whole file)
 
 # ------------------------------------------------------------------ inception (product mode)
 
@@ -30,6 +32,7 @@ command = "requirements"
 tier = "balanced"
 session = "fresh"
 read = ["reference/product/vision.md", "reference/project-summary.md", "reference/domain/glossary.md", "inception/templates/functional-requirements.md", "inception/templates/non-functional-requirements.md"]
+sources = true
 
 [steps.mockup]
 title = "Clickable mockup and screen ↔ requirement map"
@@ -39,6 +42,8 @@ command = "mockup"
 tier = "balanced"
 session = "fresh"
 read = ["reference/project-summary.md", "reference/product/functional-requirements.md", "reference/domain/glossary.md", "inception/templates/mockup-reference.md"]
+sources = true
+design = true
 
 [steps.architecture]
 title = "Stack, architecture, ADRs"
@@ -49,6 +54,7 @@ tier = "deep"
 session = "fresh"
 read = ["project.toml", "reference/project-summary.md", "reference/product/non-functional-requirements.md", "reference/product/mockup-reference.md", "inception/templates/architecture.md", "inception/templates/adr.md"]
 run = ["python3 tools/context.py --index reference/product/functional-requirements.md"]
+sources = true
 
 [steps.backlog]
 title = "Epics and user stories"
@@ -254,8 +260,8 @@ mode = "product"
 body = "Follow `workflow/steps/requirements.md`. Sources: $ARGUMENTS"
 
 [commands.mockup]
-description = "Inception — single-file clickable HTML mockup and the screen ↔ FR map"
-args = "[FR-xx… | screen names]  (empty = all UI requirements)"
+description = "Inception — clickable mockup (or map of the existing design) and the screen ↔ FR map"
+args = "[FR-xx… | screen names]  (empty = all UI requirements; an existing design in project.toml is mapped, not rebuilt)"
 tier = "balanced"
 mode = "product"
 body = "Follow `workflow/steps/mockup.md`. Scope: $ARGUMENTS"

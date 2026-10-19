@@ -2,10 +2,12 @@
 """Deterministic project bootstrap (the scripted half of /kickoff).
 
   python3 tools/init_project.py --name "Course Planner" --prefix CP --language it --owner "Jane Doe" \
-      [--description "…"] [--no-mockup] [--tools claude-code,codex,copilot,cursor]
+      [--description "…"] [--no-mockup] [--tools claude-code,codex,copilot,cursor] \
+      [--sources docs/brief.md notes.md] [--design docs/prototype.html]
 
 Updates project.toml and models.toml in place (comments preserved), rewrites the example IDs of the
-inception templates with the new prefix, and regenerates the tool adapters.
+inception templates with the new prefix, records the kickoff sources and the existing design (if any) so that
+later steps load them through tools/context.py, and regenerates the tool adapters.
 """
 from __future__ import annotations
 
@@ -24,14 +26,14 @@ EXAMPLE_FILES = ("inception/templates/stories.toml", "inception/templates/PLAN.m
 
 def set_key(text: str, section: str, key: str, value) -> str:
     """Replace `key = …` inside [section], keeping any trailing comment. Adds the key if absent."""
-    lit = json.dumps(value, ensure_ascii=False) if isinstance(value, str) else str(value).lower()
+    lit = json.dumps(value, ensure_ascii=False) if isinstance(value, (str, list)) else str(value).lower()
     sec = re.search(rf"^\[{re.escape(section)}\]\s*$", text, re.M)
     if not sec:
         return text.rstrip() + f"\n\n[{section}]\n{key} = {lit}\n"
     end_m = re.search(r"^\[", text[sec.end():], re.M)
     end = sec.end() + end_m.start() if end_m else len(text)
     body = text[sec.end():end]
-    rx = re.compile(rf"^({re.escape(key)}\s*=\s*)(\"[^\"]*\"|\S+)(.*)$", re.M)
+    rx = re.compile(rf"^({re.escape(key)}\s*=\s*)(\[[^\]\n]*\]|\"[^\"]*\"|\S+)(.*)$", re.M)
     if rx.search(body):
         body = rx.sub(lambda m: m.group(1) + lit + m.group(3), body, count=1)
     else:
@@ -48,6 +50,8 @@ def main() -> None:
     ap.add_argument("--description", default="")
     ap.add_argument("--no-mockup", action="store_true")
     ap.add_argument("--tools", default=",".join(TOOLS))
+    ap.add_argument("--sources", nargs="*", default=None, help="kickoff sources (brief, transcripts, notes), read by later inception steps")
+    ap.add_argument("--design", default=None, help="existing design or prototype: /mockup maps it instead of building one")
     a = ap.parse_args()
 
     if not re.fullmatch(r"[A-Z]{2,3}", a.prefix):
@@ -58,6 +62,11 @@ def main() -> None:
     bad = [t for t in tools if t not in TOOLS]
     if bad or not tools:
         sys.exit(f"--tools: choose among {', '.join(TOOLS)}")
+    srcs = [wf.rel(os.path.abspath(x)) if os.path.isabs(x) else os.path.normpath(x) for x in (a.sources or [])]
+    design = (wf.rel(os.path.abspath(a.design)) if os.path.isabs(a.design) else os.path.normpath(a.design)) if a.design else None
+    missing = [x for x in srcs + ([design] if design else []) if not wf.exists(x)]
+    if missing:
+        sys.exit(f"source not found (paths are relative to the repository root): {', '.join(missing)}")
 
     old_prefix = wf.prefix()
     p = wf.read("project.toml")
@@ -65,6 +74,10 @@ def main() -> None:
                  ("language", a.language), ("owner", a.owner)):
         p = set_key(p, "project", k, v)
     p = set_key(p, "inception", "mockup", not a.no_mockup)
+    if a.sources is not None:
+        p = set_key(p, "inception", "sources", [x for x in srcs if x != design])
+    if design is not None:
+        p = set_key(p, "inception", "design", design)
     wf.write("project.toml", p)
 
     m = wf.read("models.toml")
@@ -82,7 +95,8 @@ def main() -> None:
     import render_agents  # after the config is written
     render_agents.main()
     print(f"initialized '{a.name}' · prefix {a.prefix} · language {a.language} · tools {', '.join(tools)}"
-          f" · mockup {'on' if not a.no_mockup else 'off'}")
+          f" · mockup {'on' if not a.no_mockup else 'off'}" + (f" · sources {len(srcs)}" if srcs else "")
+          + (f" · design {design}" if design else ""))
 
 
 if __name__ == "__main__":

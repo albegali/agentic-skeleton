@@ -13,6 +13,8 @@ tracker = "local"            # local | <adapter name>; see tools/README.md "Trac
 
 [inception]
 mockup = true                # include the /mockup step in the lifecycle
+sources = []                 # kickoff sources (brief, transcripts, notes): read by steps with `sources = true`
+design = ""                  # existing design or prototype: /mockup maps it instead of building a new one
 
 [stack]
 # Filled by /architecture once the ADRs are approved. Used by Makefile targets setup / test / lint.

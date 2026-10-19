@@ -2,6 +2,7 @@
 """Cheap, deterministic map of an existing codebase (input of /onboard), and stack command detection (used by adopt.py).
 
   python3 tools/repo_map.py            # same as: python3 tools/context.py --repo-map
+  python3 tools/repo_map.py --json     # complete data (all files, churn, tests), schema in tools/README.md
 
 Any kind of software: web, services, mobile, desktop, games, embedded, libraries, CLIs, data/ML, infrastructure,
 extensions, or a mix. It prints languages, the directory tree with sizes, software-type signals, build / hosting /
@@ -319,16 +320,13 @@ def detect_stack(root: str) -> dict[str, str]:
 
 # ---------------------------------------------------------------- map
 
-def repo_map(root: str = wf.ROOT) -> str:
+def repo_data(root: str = wf.ROOT) -> dict:
+    """The map as data (complete lists; the text view caps them). Also the input of portals and analyzers."""
     files, vendored = codebase(root)
     generated = {f for f in files if GENERATED_RX.search(f)}
     lines = {f: count_lines(os.path.join(root, f)) for f in files
              if os.path.splitext(f)[1].lower() in SOURCE_EXT and f not in generated}
-    total = sum(lines.values())
     name = (wf.project().get("project", {}).get("name") if os.path.abspath(root) == wf.ROOT else None) or os.path.basename(root)
-    out = [f"# Repository map — {name}",
-           f"{len(files)} files · {len(lines)} source files · {total} source lines · {len(generated)} generated/minified · "
-           f"{vendored} vendored files not mapped (workflow files excluded; no contents shown)", ""]
 
     lang_files: Counter[str] = Counter()
     lang_lines: Counter[str] = Counter()
@@ -336,18 +334,9 @@ def repo_map(root: str = wf.ROOT) -> str:
         lg = SOURCE_EXT[os.path.splitext(f)[1].lower()]
         lang_files[lg] += 1
         lang_lines[lg] += n
-    out += ["## Languages (lines · files)"] + [f"- {lg}: {lang_lines[lg]} · {lang_files[lg]}" for lg, _ in lang_lines.most_common(10)]
     other = Counter(os.path.splitext(f)[1].lower() or os.path.basename(f) for f in files if f not in lines)
-    if other:
-        out.append("- other file types (files): " + ", ".join(f"{e} {n}" for e, n in other.most_common(15)))
-    out.append("")
 
-    sig = signals(files)
-    for cat, title in CATEGORIES.items():
-        rows = [f"- {label}: {examples(paths)}" for label, paths in sig.get(cat, {}).items()]
-        out += [f"## {title}"] + (rows or ["- none"]) + [""]
-
-    # tree: directories up to depth 3 with file count and source lines
+    # directories up to depth 3 with file count and source lines
     dfiles: Counter[str] = Counter()
     dlines: Counter[str] = Counter()
     for f in files:
@@ -356,54 +345,87 @@ def repo_map(root: str = wf.ROOT) -> str:
             d = "/".join(parts[:k])
             dfiles[d] += 1
             dlines[d] += lines.get(f, 0)
-    children: dict[str, list[str]] = defaultdict(list)
-    for d in dfiles:
-        children[d.rpartition("/")[0]].append(d)
-    tree: list[str] = []
-
-    def walk(parent: str, depth: int) -> None:
-        for d in sorted(children.get(parent, []), key=lambda x: (-dlines[x], -dfiles[x], x))[:12]:
-            tree.append(f"{'  ' * depth}- {d.rpartition('/')[2]}/ ({dfiles[d]} files, {dlines[d]} lines)")
-            if depth < 2:
-                walk(d, depth + 1)
-
-    walk("", 0)
-    out += ["## Directory tree (depth ≤ 3, largest first)"] + capped(tree, 45) + [""]
-    root_files = [f for f in files if "/" not in f]
-    out += ["## Root files", ", ".join(root_files[:40]) + (f" … +{len(root_files) - 40}" if len(root_files) > 40 else "") or "- none", ""]
-
-    docs = sorted((f for f in files if match(f, DOCS)), key=lambda f: (f.count("/"), f))
-    out += ["## Docs and existing agent rules"] + (capped([f"- {f}" for f in docs], 12) or ["- none"]) + [""]
-    mig = sorted({os.path.dirname(f) for f in files if re.search(r"(^|/)(migrations|migrate|alembic|db/migrate|flyway|liquibase)/", f)})
-    if mig:
-        out += ["## Database migrations"] + capped([f"- {d}/" for d in mig], 5) + [""]
-
-    entries = sorted((f for f in files if match(f, ENTRY) and f in lines and not TEST_RX.search(f)), key=lambda f: (f.count("/"), f))
-    out += ["## Likely entry points"] + (capped([f"- {f}" for f in entries], 12) or ["- none found"]) + [""]
 
     tests = [f for f in files if TEST_RX.search(f)]
-    tdirs = Counter("/".join(f.split("/")[:2]) if "/" in f else "." for f in tests)
-    out += [f"## Tests: {len(tests)} files"] + capped([f"- {d} ({n})" for d, n in tdirs.most_common()], 8) + [""]
-
-    big = sorted(lines.items(), key=lambda x: -x[1])[:10]
-    out += ["## Largest source files (generated excluded)"] + [f"- {f} ({n} lines)" for f, n in big] + [""]
-
+    git_info = None
     if os.path.isdir(os.path.join(root, ".git")):
         log = git(root, "log", "--format=%ad %ae", "--date=short")
         rows = [r.split(" ", 1) for r in log.splitlines() if r]
         if rows:
-            out += ["## Git", f"- {len(rows)} commits · {rows[-1][0]} → {rows[0][0]} · {len({r[1] for r in rows if len(r) > 1})} authors"]
             churn = Counter(f for f in git(root, "log", "--since=180 days ago", "--name-only", "--format=").splitlines()
                             if f and f in lines)
-            if churn:
-                out.append("- most changed source files in the last 180 days: " +
-                           ", ".join(f"{f} ({n})" for f, n in churn.most_common(8)))
-            out.append("")
-    stack = detect_stack(root)
-    out += ["## Stack commands detected (project.toml [stack] candidates)"] + \
-           [f"- {k}: {v or '—'}" for k, v in stack.items()]
+            git_info = {"commits": len(rows), "first": rows[-1][0], "last": rows[0][0],
+                        "authors": len({r[1] for r in rows if len(r) > 1}), "churn_180d": dict(churn.most_common())}
+    return {
+        "name": name, "files": len(files), "source_files": len(lines), "source_lines": sum(lines.values()),
+        "generated": len(generated), "vendored": vendored,
+        "languages": [{"language": lg, "lines": n, "files": lang_files[lg]} for lg, n in lang_lines.most_common()],
+        "other_types": dict(other.most_common()),
+        "signals": signals(files),
+        "dirs": [{"dir": d, "files": dfiles[d], "lines": dlines[d]} for d in dfiles],
+        "root_files": [f for f in files if "/" not in f],
+        "docs": sorted((f for f in files if match(f, DOCS)), key=lambda f: (f.count("/"), f)),
+        "migrations": sorted({os.path.dirname(f) for f in files if re.search(r"(^|/)(migrations|migrate|alembic|db/migrate|flyway|liquibase)/", f)}),
+        "entry_points": sorted((f for f in files if match(f, ENTRY) and f in lines and not TEST_RX.search(f)), key=lambda f: (f.count("/"), f)),
+        "tests": tests,
+        "source_sizes": dict(sorted(lines.items(), key=lambda x: -x[1])),
+        "git": git_info,
+        "stack": detect_stack(root),
+    }
+
+
+def repo_map(root: str = wf.ROOT) -> str:
+    d = repo_data(root)
+    out = [f"# Repository map — {d['name']}",
+           f"{d['files']} files · {d['source_files']} source files · {d['source_lines']} source lines · {d['generated']} generated/minified · "
+           f"{d['vendored']} vendored files not mapped (workflow files excluded; no contents shown)", ""]
+    out += ["## Languages (lines · files)"] + [f"- {x['language']}: {x['lines']} · {x['files']}" for x in d["languages"][:10]]
+    if d["other_types"]:
+        out.append("- other file types (files): " + ", ".join(f"{e} {n}" for e, n in list(d["other_types"].items())[:15]))
+    out.append("")
+
+    for cat, title in CATEGORIES.items():
+        rows = [f"- {label}: {examples(paths)}" for label, paths in d["signals"].get(cat, {}).items()]
+        out += [f"## {title}"] + (rows or ["- none"]) + [""]
+
+    dirs = {x["dir"]: x for x in d["dirs"]}
+    children: dict[str, list[str]] = defaultdict(list)
+    for k in dirs:
+        children[k.rpartition("/")[0]].append(k)
+    tree: list[str] = []
+
+    def walk(parent: str, depth: int) -> None:
+        for k in sorted(children.get(parent, []), key=lambda x: (-dirs[x]["lines"], -dirs[x]["files"], x))[:12]:
+            tree.append(f"{'  ' * depth}- {k.rpartition('/')[2]}/ ({dirs[k]['files']} files, {dirs[k]['lines']} lines)")
+            if depth < 2:
+                walk(k, depth + 1)
+
+    walk("", 0)
+    out += ["## Directory tree (depth ≤ 3, largest first)"] + capped(tree, 45) + [""]
+    rf = d["root_files"]
+    out += ["## Root files", ", ".join(rf[:40]) + (f" … +{len(rf) - 40}" if len(rf) > 40 else "") or "- none", ""]
+    out += ["## Docs and existing agent rules"] + (capped([f"- {f}" for f in d["docs"]], 12) or ["- none"]) + [""]
+    if d["migrations"]:
+        out += ["## Database migrations"] + capped([f"- {m}/" for m in d["migrations"]], 5) + [""]
+    out += ["## Likely entry points"] + (capped([f"- {f}" for f in d["entry_points"]], 12) or ["- none found"]) + [""]
+
+    tdirs = Counter("/".join(f.split("/")[:2]) if "/" in f else "." for f in d["tests"])
+    out += [f"## Tests: {len(d['tests'])} files"] + capped([f"- {k} ({n})" for k, n in tdirs.most_common()], 8) + [""]
+    out += ["## Largest source files (generated excluded)"] + [f"- {f} ({n} lines)" for f, n in list(d["source_sizes"].items())[:10]] + [""]
+
+    g = d["git"]
+    if g:
+        out += ["## Git", f"- {g['commits']} commits · {g['first']} → {g['last']} · {g['authors']} authors"]
+        if g["churn_180d"]:
+            out.append("- most changed source files in the last 180 days: " +
+                       ", ".join(f"{f} ({n})" for f, n in list(g["churn_180d"].items())[:8]))
+        out.append("")
+    out += ["## Stack commands detected (project.toml [stack] candidates)"] + [f"- {k}: {v or '—'}" for k, v in d["stack"].items()]
     return "\n".join(out)
 
 
 if __name__ == "__main__":
-    print(repo_map())
+    if "--json" in sys.argv:
+        wf.dump_json(repo_data())
+    else:
+        print(repo_map())

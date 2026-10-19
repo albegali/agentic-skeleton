@@ -2,7 +2,7 @@
 
 **Command**: `/requirements [sources…]` · **Tier**: balanced · **Session**: fresh
 
-**Context**: `python3 tools/context.py requirements` + the sources passed as arguments (transcripts, documents, existing specs). If no source is given and the vision is thin, ask for sources before writing.
+**Context**: `python3 tools/context.py requirements` (includes the kickoff sources recorded in `project.toml`) + any further sources passed as arguments (transcripts, documents, existing specs). If there are no sources and the vision is thin, ask for sources before writing.
 
 ## Procedure
 1. Extract candidate requirements from vision and sources. For each, keep the **source** (file + section or quote) or mark it `assumption`.
