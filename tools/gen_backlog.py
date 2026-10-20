@@ -8,7 +8,7 @@
 Options:
   --deps   print only the compact dependency list (used by the plan step), write nothing
   --csv    also write reference/backlog/tracker-import.csv (generic import for an external tracker)
-  --json   print epics and stories (TOML fields + paths of their artifacts), write nothing
+  --json   print the contract envelope `backlog`: epics and stories (TOML fields + paths of their artifacts), write nothing
 """
 from __future__ import annotations
 
@@ -55,22 +55,18 @@ As a {s.get('as_a', '…')}, I want {s.get('i_want', '…')}, so that {s.get('so
 """
 
 
-def artifacts(i: str) -> dict:
-    """Paths of the chain artifacts of a story (None when absent)."""
-    pats = {"story": f"analysis/10-stories/STORY_{i}_*.md", "analysis": f"analysis/20-analysis/ANALYSIS_{i}_*.md",
-            "refined": f"analysis/30-refined/REFINED_{i}_*.md", "brief": f"delivery/10-briefs/BRIEF-{i}-*.md",
-            "spec": f"delivery/20-specs/SPEC-{i}-*.md", "run": f"delivery/30-runs/RUN-{i}*.md"}
-    return {k: (wf.rel(h) if (h := wf.one(p)) else None) for k, p in pats.items()}
-
-
 def main() -> None:
+    if "--json" in sys.argv:
+        try:
+            b = wf.backlog()
+        except (OSError, ValueError) as e:  # tomllib.TOMLDecodeError is a ValueError
+            wf.fail_envelope("backlog", "bad_input", f"backlog/stories.toml: {e}")
+        wf.dump_envelope("backlog", {"status": b.get("status"), "epics": list({e["id"]: e for e in b.get("epic", [])}.values()),
+                                     "stories": [{**s, "artifacts": wf.artifacts(s["id"])} for s in b.get("story", [])]})
+        return
     b = wf.backlog()
     stories = b.get("story", [])
     epics = {e["id"]: e for e in b.get("epic", [])}
-    if "--json" in sys.argv:
-        wf.dump_json({"status": b.get("status"), "epics": list(epics.values()),
-                      "stories": [{**s, "artifacts": artifacts(s["id"])} for s in stories]})
-        return
     if "--deps" in sys.argv:
         for s in stories:
             print(f"{s['id']} [{s.get('epic', '')} {s.get('priority', '')} {s.get('size', '')} {s.get('release', '')}] "
