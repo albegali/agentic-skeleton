@@ -351,9 +351,13 @@ class Token(PortalCase):
         self.assertGreaterEqual(len(token), 43)  # 256 bits, urlsafe
         self.assertEqual(h["token"], token)
         self.assertNotIn(token, " ".join(h["argv"]))
-        p.terminate(); out, _ = p.communicate(timeout=15)
-        self.assertIn("%s/#token=%s" % (info["url"], token), out)
-        self.assertEqual(out.count(token), 1)  # AC6: printed once
+        out = []  # read up to the "Open" line, never to EOF: the server child may outlive a killed launcher on Windows
+        while not out or not out[-1].startswith("Open "):
+            line = p.stdout.readline()
+            self.assertTrue(line, "launcher closed stdout before printing the URL")
+            out.append(line)
+        self.assertEqual(out[-1].strip(), "Open %s/#token=%s" % (info["url"], token))
+        self.assertEqual("".join(out).count(token), 1)  # AC6: printed once
 
     @unittest.skipIf(os.name == "nt", "POSIX modes")
     def test_ac2_token_file_is_user_only(self):  # AC2
@@ -428,7 +432,9 @@ class Token(PortalCase):
         rel, p, info, h = self.start()
         with open(os.path.join(self.root, ".portal", "run.json")) as f:
             self.assertNotIn(h["token"], f.read())
-        p.terminate(); _, err = p.communicate(timeout=15)
+        p.terminate()
+        self.kill_servers()  # Windows terminate() is a hard kill: release the pipes held by the orphaned server
+        _, err = p.communicate(timeout=15)
         self.assertNotIn(h["token"], err)
 
 
