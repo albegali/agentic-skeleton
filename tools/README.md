@@ -51,6 +51,8 @@ Flow: find the repository root (nearest `project.toml`) → if `.portal/run.json
 
 `PORTAL_BUNDLE=<zip or directory>` skips the download (offline or development): a zip is verified when a `manifest.json` sits next to it; a directory is used as it is. Exit codes: 0 ok, 1 user/config error (no `project.toml`, missing or unknown version, no network and no cache, Python too old), 2 integrity error (checksum, unsafe archive, unsupported manifest).
 
+Session token: on each start the launcher generates a 256-bit token, writes it to `.portal/token` (created with mode 0600; on Windows restricted to the current user with `icacls`, a warning if that fails), gives it to the server as `PORTAL_TOKEN` (environment only, never an argument) and opens `<url>/#token=<token>`, printing that URL once. A portal that is already running is opened with the token read from `.portal/token`; if the file is missing, empty or readable by other users the plain URL opens and a message explains how to restart. `.portal/token` is removed when the launcher exits; `run.json` never contains the token.
+
 `manifest.json` (release asset, manifest format 1): `{"manifest": 1, "version": "x.y.z", "asset": "agentic-portal-x.y.z.zip", "size": <bytes>, "sha256": "<hex>", "requires_python": ">=3.14"}`. Unknown keys are ignored; a different `manifest` major makes the launcher stop. The bundle zip holds the `portal_server/` package at its root.
 
 ## Kickoff sources and existing design

@@ -7,6 +7,8 @@ Reads project.toml [portal]:
 Downloads manifest.json and the bundle zip it names from GitHub Releases, verifies size and SHA-256, caches the
 bundle in .portal/<version>/ (gitignored) and starts it for this repository. A portal already running for the
 repository is opened instead. PORTAL_BUNDLE=<zip or directory> skips the download (offline or development use).
+The launcher generates the session token, keeps it in .portal/token (readable by the current user only), gives it to the
+server as PORTAL_TOKEN and opens <url>/#token=<token>; a reused portal opens with the token read from that file.
 Ctrl+C stops the portal. `--no-browser` skips opening the browser. Exit codes: 0 ok, 1 user/config error, 2 integrity error.
 """
 import sys
@@ -19,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -291,6 +294,65 @@ def write_run_file(root: str, info: dict) -> None:
     os.replace(tmp, p)
 
 
+# ---- session token ---------------------------------------------------------------------------------------------
+
+def token_file(root: str) -> str:
+    return os.path.join(root, ".portal", "token")
+
+
+def restrict_windows(path: str) -> None:
+    """Best effort: only the current user may access the file; a failure is a warning, not an error."""
+    user = os.environ.get("USERNAME", "")
+    if os.environ.get("USERDOMAIN"):
+        user = os.environ["USERDOMAIN"] + "\\" + user
+    try:
+        r = subprocess.run(["icacls", path, "/inheritance:r", "/grant:r", "%s:F" % user], capture_output=True, text=True, timeout=20)
+        ok = r.returncode == 0 and bool(user)
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    if not ok:
+        print("warning: could not restrict %s to the current user; protect it manually" % path, file=sys.stderr)
+
+
+def write_token(root: str, token: str) -> None:
+    p = token_file(root)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)  # 0600 from creation: never readable by others
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(token)
+    if os.name == "nt":
+        restrict_windows(tmp)
+    os.replace(tmp, p)
+
+
+def read_token(root: str) -> "str | None":
+    """The token of the running portal, or None when the file is missing, empty or accessible to other users."""
+    p = token_file(root)
+    try:
+        if os.name != "nt" and os.stat(p).st_mode & 0o077:
+            return None
+        with open(p, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def remove_token(root: str) -> None:
+    try:
+        os.remove(token_file(root))
+    except OSError:
+        pass
+
+
+def launch_url(url: str, token: "str | None") -> str:
+    return "%s/#token=%s" % (url, token) if token else url
+
+
 # ---- start -----------------------------------------------------------------------------------------------------
 
 def supports_repo_flag(py: list, bundle: str) -> bool:
@@ -308,9 +370,15 @@ def serve(root: str, bundle: str, manifest: "dict | None", cfg: dict, open_brows
     cmd = py + ["-m", "portal_server", "--host", HOST, "--port", str(port)]
     if supports_repo_flag(py, bundle):
         cmd += ["--repo", root]
-    env = {**os.environ, "PYTHONPATH": bundle}  # a bundle without --repo reads the repository from the working directory
+    token = secrets.token_urlsafe(32)
+    env = {**os.environ, "PYTHONPATH": bundle, "PORTAL_TOKEN": token}  # token by environment, never by argument; a bundle without --repo reads the repository from the working directory
     url = "http://%s:%d" % (HOST, port)
-    proc = subprocess.Popen(cmd, cwd=root, env=env)
+    write_token(root, token)
+    try:
+        proc = subprocess.Popen(cmd, cwd=root, env=env)
+    except BaseException:
+        remove_token(root)
+        raise
     stop = signal.SIGBREAK if os.name == "nt" else signal.SIGTERM
     signal.signal(stop, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))  # terminate = Ctrl+C: cleanup still runs
     try:
@@ -324,8 +392,9 @@ def serve(root: str, bundle: str, manifest: "dict | None", cfg: dict, open_brows
         write_run_file(root, {"pid": proc.pid, "port": port, "url": url, "version": cfg["version"],
                               "started_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
         print("Portal %s for %s at %s (Ctrl+C to stop)" % (cfg["version"], root, url), flush=True)
+        print("Open %s" % launch_url(url, token), flush=True)  # the one place the token is printed
         if open_browser:
-            webbrowser.open(url)
+            webbrowser.open(launch_url(url, token))
         return proc.wait()
     except KeyboardInterrupt:
         return 0
@@ -340,6 +409,7 @@ def serve(root: str, bundle: str, manifest: "dict | None", cfg: dict, open_brows
             os.remove(run_file(root))
         except OSError:
             pass
+        remove_token(root)
 
 
 def warn_gitignore(root: str) -> None:
@@ -361,9 +431,14 @@ def main(argv=None) -> int:
         cfg = portal_config(root)
         url = running_instance(root)
         if url:
+            token = read_token(root)
             print("Portal already running for this repository: %s" % url)
+            if token:
+                print("Open %s" % launch_url(url, token))
+            else:
+                print("The session token is not available; stop the running portal and run `make portal` again to open it signed in.")
             if not args.no_browser:
-                webbrowser.open(url)
+                webbrowser.open(launch_url(url, token))
             return 0
         bundle, manifest = get_bundle(root, cfg)
         warn_gitignore(root)
