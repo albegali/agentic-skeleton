@@ -334,14 +334,14 @@ class WorkflowTest(unittest.TestCase):
         r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
         n = r.next()
         self.assertEqual({s["id"]: s["stage"] for s in n["stories"]}, {"DM0101": "workshop", "DM0102": "analysis"})
-        chk = json.loads(r.run("tools/check_workflow.py", "--json").stdout)
+        chk = json.loads(r.run("tools/check_workflow.py", "--json").stdout)["data"]
         self.assertTrue(chk["ok"])
         self.assertEqual(chk["counts"]["stories"], 2)
         r.write("backlog/stories.toml", STORIES.format(st="approved").replace('fr = ["FR-02"]', 'fr = ["FR-09"]'))
         bad = r.run("tools/check_workflow.py", "--json", ok=False)
         self.assertEqual(bad.returncode, 1)
-        self.assertIn({"level": "error", "area": "backlog", "message": "DM0102: unknown FR-09"}, json.loads(bad.stdout)["issues"])
-        bl = json.loads(r.run("tools/gen_backlog.py", "--json").stdout)
+        self.assertIn({"level": "error", "area": "backlog", "message": "DM0102: unknown FR-09"}, json.loads(bad.stdout)["data"]["issues"])
+        bl = json.loads(r.run("tools/gen_backlog.py", "--json").stdout)["data"]
         self.assertEqual(bl["stories"][0]["artifacts"]["analysis"], "analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md")
         self.assertIsNone(bl["stories"][1]["artifacts"]["spec"])
         self.assertFalse(os.path.exists(os.path.join(r.dir, "analysis/10-stories/STORY_DM0102_export.md")))  # --json writes nothing

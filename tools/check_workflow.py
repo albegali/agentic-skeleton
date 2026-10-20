@@ -5,7 +5,8 @@ Inception: unique FR/NFR IDs; ADR numbering; mockup map cites existing FRs.
 Backlog:   story IDs match project.toml prefix; epics exist; deps exist and are acyclic; FR/NFR links exist; Must FRs covered.
 Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution; Persisted before Closed.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
---json:    {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]} (same exit code).
+--json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
+           (same exit code: a workflow with errors is still a successful check, reported in data).
 """
 from __future__ import annotations
 
@@ -187,7 +188,7 @@ def main() -> None:
               "Brief": len(wf.matches("delivery/10-briefs/BRIEF-*.md")), "Spec": len(wf.matches("delivery/20-specs/SPEC-*.md")),
               "RUN": len(wf.matches("delivery/30-runs/RUN-*.md"))}
     if "--json" in sys.argv:
-        wf.dump_json({"ok": not E, "errors": len(E), "warnings": len(W), "counts": counts, "issues": issues})
+        wf.dump_envelope("check", {"ok": not E, "errors": len(E), "warnings": len(W), "counts": counts, "issues": issues})
         sys.exit(1 if E else 0)
     print(" · ".join(f"{k} {v}" for k, v in counts.items()))
     for w in W:
@@ -199,4 +200,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError) as e:  # unreadable or malformed TOML/Markdown (tomllib.TOMLDecodeError is a ValueError)
+        if "--json" not in sys.argv:
+            raise
+        wf.fail_envelope("check", "bad_input", str(e))

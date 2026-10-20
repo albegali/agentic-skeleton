@@ -13,7 +13,7 @@ from functools import lru_cache
 
 ROOT = os.path.abspath(os.environ.get("WF_ROOT") or os.path.join(os.path.dirname(__file__), ".."))
 TIERS = ("fast", "balanced", "deep")
-SCHEMA = 1  # legacy flat --json outputs, not yet migrated to the envelope (AP0109); removed with the last one
+SCHEMA = 1  # legacy flat --json of context.py (outside the contract)
 CONTRACT_VERSION = "1.0"  # semver of the --json envelope (tools/README.md "JSON contract"): minor adds fields, major breaks
 
 
@@ -191,16 +191,147 @@ def sprints() -> list[dict]:
     return out
 
 
+def releases() -> list[dict]:
+    """Rows `| R<n> | content | target | exit criterion |` of PLAN.md; `sprints` = sprints whose stories belong to it."""
+    if not exists("PLAN.md"):
+        return []
+    sp = sprints_with_release()
+    out = []
+    for line in read("PLAN.md").splitlines():
+        m = re.match(r"^\|\s*(R\d+)\s*\|([^|]*)\|([^|]*)\|([^|]*)\|", line)
+        if m:
+            rid = m.group(1)
+            out.append({"id": rid, "title": m.group(2).strip(), "goal": m.group(4).strip(), "target": m.group(3).strip(),
+                        "sprints": [s["sprint"] for s in sp if s.get("release") == rid]})
+    return out
+
+
+def sprints_with_release() -> list[dict]:
+    """sprints() plus `release`: the release (stories.toml) of the first story of the row that has one."""
+    st = stories()
+    out = []
+    for s in sprints():
+        rel_ = next((st[i]["release"] for i in s["ids"] if st.get(i, {}).get("release")), None)
+        out.append({**s, "release": rel_} if rel_ else s)
+    return out
+
+
+# ---------------------------------------------------------------- journal
+
+def journal_entries(folder: str) -> list[dict]:
+    """`project-journal/<folder>/*.md` except README.md: file, title (first `# ` heading), date (frontmatter or file name)."""
+    out = []
+    for p in matches(f"project-journal/{folder}/*.md"):
+        if os.path.basename(p) == "README.md":
+            continue
+        text = read(p)
+        e: dict = {"file": rel(p)}
+        if m := re.search(r"^# (.+)$", text, re.M):
+            e["title"] = m.group(1).strip()
+        named = re.search(r"\d{4}-\d{2}-\d{2}", os.path.basename(p))
+        if d := front(text, "date") or (named.group(0) if named else None):
+            e["date"] = d.strip("'\"")
+        out.append(e)
+    return out
+
+
+def journal() -> dict:
+    ctx = [read(p).strip() for p in matches("project-journal/context/*.md") if os.path.basename(p) != "README.md"]
+    return {"context": "\n\n".join(ctx) if ctx else None,
+            **{k: journal_entries(k) for k in ("decisions", "learnings", "weekly", "monthly")}}
+
+
+# ---------------------------------------------------------------- story chain
+
+CHAIN = {"story": "analysis/10-stories/STORY_{i}_*.md", "analysis": "analysis/20-analysis/ANALYSIS_{i}_*.md",
+         "refined": "analysis/30-refined/REFINED_{i}_*.md", "brief": "delivery/10-briefs/BRIEF-{i}-*.md",
+         "spec": "delivery/20-specs/SPEC-{i}-*.md", "run": "delivery/30-runs/RUN-{i}*.md"}
+
+
+def artifacts(i: str) -> dict:
+    """Paths of the chain artifacts of a story (None when absent)."""
+    return {k: (rel(h) if (h := one(p.format(i=i))) else None) for k, p in CHAIN.items()}
+
+
+def section(text: str, start: str, end: str) -> str:
+    """Text after the first line starting with `start` up to the next line starting with `end` (or the end)."""
+    m = re.search(rf"^{re.escape(start)}.*?$(.*?)(?=^{re.escape(end)}|\Z)", text, re.M | re.S)
+    return m.group(1) if m else ""
+
+
+def task_ids(text: str, i: str) -> set[str]:
+    """Task IDs named in a RUN §9 list, ranges included (`TSK-X-01 to TSK-X-08`, `–`, `..`)."""
+    tid = rf"TSK-{re.escape(i)}-(\d+)"
+    ids = {f"TSK-{i}-{n}" for n in re.findall(tid, text)}
+    for a, b in re.findall(rf"{tid}\s*(?:to|–|—|\.\.)\s*{tid}", text):
+        ids |= {f"TSK-{i}-{n:0{len(a)}d}" for n in range(int(a), int(b) + 1)}
+    return ids
+
+
+def tasks(i: str, spec: str | None, run: str | None) -> list[dict]:
+    """`TSK-<ID>-NN` of Spec §5 with title; status done/deferred from RUN §9, else open."""
+    if not spec:
+        return []
+    outcome = section(read(run), "# 9.", "# 10.") if run else ""
+    done = task_ids(section(outcome, "Tasks completed", "Tasks deferred"), i)
+    deferred = task_ids(section(outcome, "Tasks deferred", "Goal achieved"), i)
+    out = []
+    for m in re.finditer(rf"^- `?(TSK-{re.escape(i)}-\d+)`?\s*(.*)$", section(read(spec), "# 5.", "# 6."), re.M):
+        tid = m.group(1)
+        out.append({"id": tid, "title": m.group(2).strip(),
+                    "status": "done" if tid in done else "deferred" if tid in deferred else "open"})
+    return out
+
+
+def story_chain(i: str) -> dict:
+    import next_step  # lazy: next_step imports wf
+    paths = artifacts(i)
+    arts = []
+    for kind, p in paths.items():
+        if p:
+            text = read(p)
+            arts.append({"kind": kind, "path": p, "status": md_status(text) or front(text, "status")})
+    return {"id": i, "title": stories()[i].get("title", ""), "stage": next_step.stage(i)[0], "artifacts": arts,
+            "tasks": tasks(i, paths["spec"], paths["run"])}
+
+
+USAGE = "usage: python3 tools/wf.py version|plan|journal [--json] · python3 tools/wf.py story <ID> [--json]"
+
+
 def main(argv: list[str]) -> int:
+    as_json = "--json" in argv
     args = [a for a in argv if a != "--json"]
-    if args != ["version"]:
-        print("usage: python3 tools/wf.py version [--json]")
+    cmd = args[0] if args else ""
+    if cmd not in ("version", "plan", "journal", "story") or len(args) != (2 if cmd == "story" else 1):
+        if as_json and cmd in ("plan", "journal", "story"):
+            fail_envelope(cmd, "usage", USAGE, 2)
+        print(USAGE)
         return 2
-    data = {"skeleton": skeleton_version(), "contract": CONTRACT_VERSION}
-    if "--json" in argv:
-        dump_envelope("version", data)
+    if cmd == "version":
+        data = {"skeleton": skeleton_version(), "contract": CONTRACT_VERSION}
+        if not as_json:
+            print(f"agentic-skeleton {data['skeleton']} (contract {data['contract']})")
+            return 0
     else:
-        print(f"agentic-skeleton {data['skeleton']} (contract {data['contract']})")
+        try:
+            if cmd == "story":
+                i = args[1].replace("-", "")
+                if i not in stories():
+                    if as_json:
+                        fail_envelope("story", "unknown_id", f"Unknown ID: {i}")
+                    print(f"Unknown ID: {i}")
+                    return 1
+                data = story_chain(i)
+            else:
+                data = {"releases": releases(), "sprints": sprints_with_release()} if cmd == "plan" else journal()
+        except (OSError, ValueError) as e:  # unreadable or malformed files (tomllib.TOMLDecodeError is a ValueError)
+            if not as_json:
+                raise
+            fail_envelope(cmd, "bad_input", str(e))
+        if not as_json:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+            return 0
+    dump_envelope(cmd, data)
     return 0
 
 
