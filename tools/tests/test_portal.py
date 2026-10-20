@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 import zipfile
 
 TOOLS = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -21,13 +22,13 @@ sys.path.insert(0, TOOLS)
 import portal  # noqa: E402
 
 FAKE_SERVER = '''
-import argparse, json, sys
+import argparse, json, os, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 ap = argparse.ArgumentParser(); ap.add_argument("--host"); ap.add_argument("--port", type=int); ap.add_argument("--repo")
 a = ap.parse_args()
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
-        b = json.dumps({"status": "ok", "repo": a.repo}).encode()
+        b = json.dumps({"status": "ok", "repo": a.repo, "token": os.environ.get("PORTAL_TOKEN"), "argv": sys.argv}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def log_message(self, *x): pass
 class S(HTTPServer):
@@ -329,6 +330,112 @@ class Running(PortalCase):
             s.listen()
             self.assertGreater(portal.pick_port(), base)
         self.assertEqual(portal.pick_port(), base)
+
+
+class Token(PortalCase):
+    def start(self):
+        rel, m = release(make_zip())
+        self.addCleanup(rel.close)
+        p = self.popen(rel.base)
+        info = self.wait_run_file(p)
+        h = json.loads(portal.LOCAL.open(info["url"] + "/api/health", timeout=5).read())
+        return rel, p, info, h
+
+    def token_path(self):
+        return os.path.join(self.root, ".portal", "token")
+
+    def test_ac1_server_gets_token_by_env_and_url_carries_it(self):  # AC1
+        rel, p, info, h = self.start()
+        with open(self.token_path()) as f:
+            token = f.read()
+        self.assertGreaterEqual(len(token), 43)  # 256 bits, urlsafe
+        self.assertEqual(h["token"], token)
+        self.assertNotIn(token, " ".join(h["argv"]))
+        out = []  # read up to the "Open" line, never to EOF: the server child may outlive a killed launcher on Windows
+        while not out or not out[-1].startswith("Open "):
+            line = p.stdout.readline()
+            self.assertTrue(line, "launcher closed stdout before printing the URL")
+            out.append(line)
+        self.assertEqual(out[-1].strip(), "Open %s/#token=%s" % (info["url"], token))
+        self.assertEqual("".join(out).count(token), 1)  # AC6: printed once
+
+    @unittest.skipIf(os.name == "nt", "POSIX modes")
+    def test_ac2_token_file_is_user_only(self):  # AC2
+        self.start()
+        self.assertEqual(os.stat(self.token_path()).st_mode & 0o777, 0o600)
+
+    def test_ac2_windows_restricts_with_icacls_and_warns_on_failure(self):  # AC2
+        path = os.path.join(self.root, "t")
+        open(path, "w").close()
+        env = {"USERNAME": "me", "USERDOMAIN": "PC"}
+        with unittest.mock.patch.dict(os.environ, env), unittest.mock.patch("subprocess.run") as run, \
+                unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            run.return_value.returncode = 0
+            portal.restrict_windows(path)
+            self.assertEqual(run.call_args[0][0], ["icacls", path, "/inheritance:r", "/grant:r", "PC\\me:F"])
+            self.assertEqual(err.getvalue(), "")
+            run.return_value.returncode = 5
+            portal.restrict_windows(path)
+            self.assertIn("warning", err.getvalue())
+            run.side_effect = OSError()
+            portal.restrict_windows(path)  # still no exception: the launch proceeds
+
+    def test_ac3_reuse_opens_with_same_token(self):  # AC3
+        rel, p, info, h = self.start()
+        r = self.launch("--no-browser", base=rel.base)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("%s/#token=%s" % (info["url"], h["token"]), r.stdout)
+        with open(os.path.join(self.root, ".portal", "run.json")) as f:
+            self.assertEqual(json.load(f)["pid"], info["pid"])  # no second server
+
+    def test_ac3_reuse_opens_browser_with_token(self):  # AC3
+        os.makedirs(os.path.join(self.root, ".portal"))
+        portal.write_token(self.root, "tok123")
+        with unittest.mock.patch.object(portal, "running_instance", return_value="http://127.0.0.1:9"), \
+                unittest.mock.patch("webbrowser.open") as wb, unittest.mock.patch("os.getcwd", return_value=self.root):
+            self.assertEqual(portal.main([]), 0)
+        wb.assert_called_once_with("http://127.0.0.1:9/#token=tok123")
+
+    def test_ac4_unusable_token_file_opens_plain_url(self):  # AC4
+        rel, p, info, h = self.start()
+        for prepare in (lambda: os.remove(self.token_path()),
+                        lambda: open(self.token_path(), "w").close()):
+            prepare()
+            r = self.launch("--no-browser", base=rel.base)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("#token", r.stdout)
+            self.assertIn("run `make portal` again", r.stdout)
+            self.assertIn(info["url"], r.stdout)
+
+    @unittest.skipIf(os.name == "nt", "POSIX modes")
+    def test_ac4_group_readable_token_file_is_refused(self):  # AC4
+        portal.write_token(self.root, "tok")
+        self.assertEqual(portal.read_token(self.root), "tok")
+        os.chmod(self.token_path(), 0o640)
+        self.assertIsNone(portal.read_token(self.root))
+
+    @unittest.skipIf(os.name == "nt", "Windows terminate() is a hard kill: no cleanup to observe")
+    def test_ac5_cleanup_and_stale_replaced(self):  # AC5
+        rel, p, info, h = self.start()
+        p.terminate(); p.wait(timeout=15)
+        self.assertFalse(os.path.exists(self.token_path()))
+        self.assertFalse(os.path.exists(os.path.join(self.root, ".portal", "run.json")))
+        os.makedirs(os.path.join(self.root, ".portal"), exist_ok=True)
+        portal.write_token(self.root, "stale")
+        p2 = self.popen(rel.base)
+        info2 = self.wait_run_file(p2)
+        h2 = json.loads(portal.LOCAL.open(info2["url"] + "/api/health", timeout=5).read())
+        self.assertNotEqual(h2["token"], "stale")
+        self.assertEqual(portal.read_token(self.root), h2["token"])
+
+    def test_ac6_token_not_in_run_file_or_stderr(self):  # AC6
+        rel, p, info, h = self.start()
+        with open(os.path.join(self.root, ".portal", "run.json")) as f:
+            self.assertNotIn(h["token"], f.read())
+        p.terminate()
+        self.kill_servers()  # Windows terminate() is a hard kill: release the pipes held by the orphaned server
+        _, err = p.communicate(timeout=15)
+        self.assertNotIn(h["token"], err)
 
 
 class Units(unittest.TestCase):
