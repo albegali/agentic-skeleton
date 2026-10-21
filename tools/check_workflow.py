@@ -350,7 +350,7 @@ def check_chain() -> None:
             W.append(f"RUN-{i}: story {gone} but RUN {s or 'Draft'}: set the RUN to Cancelled")
         if s in ("Reviewed", "Closed"):
             rv = wf.run_review(t)
-            if s == "Closed" and wf.heading_section(t, r"^#\s+11\.") is None:
+            if s == "Closed" and wf.heading_section(t, r"^#\s+11\.\s+Review\b") is None:  # older §11: absent or "Addendum"
                 W.append(f"RUN-{i}: Closed without a §11 Review (RUN from a skeleton before 1.7.0: add one, or ignore)")
             elif not rv or not rv["date"] or rv["outcome"] != "ok-to-close":
                 E.append(f"RUN-{i}: {s} without a review record (§11 latest `### Review #n` with Date and Outcome `ok-to-close`)")

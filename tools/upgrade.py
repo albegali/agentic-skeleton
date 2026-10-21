@@ -5,7 +5,10 @@ Called by `tools/adopt.py --upgrade <target>` (run from the skeleton) and by `ma
   base   = the file in the skeleton at the version the project records (project.toml [skeleton] version, else tools/VERSION)
   ours   = the project's file          theirs = the skeleton's file now
   ours == base → take theirs · base == theirs → keep ours · ours == theirs → nothing · otherwise a conflict.
-Any conflict stops the upgrade before anything is written (like adopt.py); the report says how to resolve it.
+Any conflict stops the upgrade before anything is written (like adopt.py); the report says how to resolve it: merge
+by hand and rerun with --keep <file>, or rerun with --take <file> to replace the local changes.
+The example templates (init_project.EXAMPLE_FILES) are compared and written with the project's ID prefix; generated
+files (GENERATED) are never merged but regenerated after the upgrade.
 Then: missing project.toml / models.toml keys are added with the skeleton's defaults, migrations between the two
 versions run (tools/migrations/<from>-<to>.py, ordered), [skeleton] version/source are recorded, adapters re-rendered.
 """
@@ -17,10 +20,11 @@ import subprocess
 import sys
 import tomllib
 
-from init_project import set_key
+from init_project import EXAMPLE_FILES, set_key
 from render_agents import BEGIN, END
 
 PROJECT_OWNED = {"project.toml", "models.toml"}  # never replaced: new keys are added instead
+GENERATED = {"delivery/20-specs/README.md"}  # never merged: regenerated from the project's files after the upgrade
 
 
 def vkey(v: str) -> tuple[int, ...]:
@@ -48,8 +52,20 @@ def add_missing_keys(ours: str, theirs: str) -> tuple[str, list[str]]:
     except tomllib.TOMLDecodeError:
         return ours, []
     added = []
+    for name, keys in t.get("tools", {}).items():  # a tool the project has: its new settings, copied as written upstream
+        if not isinstance(keys, dict) or not isinstance(o.get("tools", {}).get(name), dict):
+            continue
+        block = rf"(?ms)^\[tools\.{re.escape(name)}\][ \t]*\n.*?(?=^\[|\Z)"
+        for k in sorted(keys.keys() - o["tools"][name].keys()):
+            src_block, dst_block = re.search(block, theirs), re.search(block, ours)
+            line = src_block and re.search(rf"(?m)^{re.escape(k)}\s*=.*$", src_block.group(0))
+            if line and dst_block:  # after the table's last key line (comments that introduce the next table stay below)
+                last = list(re.finditer(r"(?m)^(\[tools\.[^\]]+\]|[A-Za-z0-9_-]+\s*=.*)$", dst_block.group(0)))[-1]
+                at = dst_block.start() + last.end()
+                ours = ours[:at] + "\n" + line.group(0) + ours[at:]
+                added.append(f"[tools.{name}] {k}")
     for sec, keys in t.items():
-        if not isinstance(keys, dict) or sec in ("vendors", "tools"):  # per-vendor/tool tables: the project's choice
+        if not isinstance(keys, dict) or sec in ("vendors", "tools"):  # vendor columns and the tool list: the project's choice
             continue
         if sec not in o:  # a new section: copied whole, with its comments
             block = re.search(rf"(?ms)^\[{re.escape(sec)}\]\s*\n.*?(?=^\[|\Z)", theirs)
@@ -64,10 +80,19 @@ def add_missing_keys(ours: str, theirs: str) -> tuple[str, list[str]]:
     return ours, added
 
 
-def upgrade(src: str, dst: str, files: list[str], read, installed, dry_run: bool) -> None:
-    """files: the skeleton files installed in projects now; installed(path): whether a path is one of them by pattern."""
+def upgrade(src: str, dst: str, files: list[str], read, installed, dry_run: bool,
+            keep: set[str] = frozenset(), take: set[str] = frozenset()) -> None:
+    """files: the skeleton files installed in projects now; installed(path): whether a path is one of them by pattern.
+    keep / take: conflicts already resolved by hand: the project's file is the resolution / the skeleton's file replaces it."""
+    if both := keep & take:
+        sys.exit(f"--keep and --take on the same file: {', '.join(sorted(both))}")
     pt = os.path.join(dst, "project.toml")
     proj = tomllib.loads(read(pt)) if os.path.exists(pt) else {}
+    prefix = proj.get("project", {}).get("id_prefix") or "PR"
+
+    def local(f: str, text: str | None) -> str | None:
+        """The example templates as init_project.py writes them in this project (skeleton IDs use the PR prefix)."""
+        return re.sub(r"\bPR(\d{4})\b", rf"{prefix}\1", text) if text is not None and f in EXAMPLE_FILES else text
     have = proj.get("skeleton", {}).get("version") or (read(os.path.join(dst, "tools/VERSION")).strip()
                                                         if os.path.exists(os.path.join(dst, "tools/VERSION")) else "")
     new = read(os.path.join(src, "tools/VERSION")).strip()
@@ -83,42 +108,47 @@ def upgrade(src: str, dst: str, files: list[str], read, installed, dry_run: bool
     def at_base(f: str) -> str | None:
         return git(src, "show", f"{base}:{f}")
 
-    take, keep, conflicts, delete = [], [], [], []
+    upd, kept, conflicts, delete = [], [], [], []
     agents = os.path.join(dst, "AGENTS.md")
     block = os.path.exists(agents) and BEGIN in read(agents)  # adopted repository: AGENTS.md holds a marked block
     candidates = list(files) + ([] if block else ["AGENTS.md"])
     candidates += ["Makefile"] if not os.path.exists(os.path.join(dst, "workflow.mk")) else []
     base_files = set((git(src, "ls-tree", "-r", "--name-only", base) or "").split())
     for f in candidates:
-        if f in PROJECT_OWNED:
+        if f in PROJECT_OWNED or f in GENERATED:
             continue
         o_path = os.path.join(dst, f)
         ours = read(o_path) if os.path.exists(o_path) else None
-        theirs = read(os.path.join(src, f))
-        b = at_base(f)
+        theirs = local(f, read(os.path.join(src, f)))
+        b = local(f, at_base(f))
         if ours == theirs:
             continue
         if ours is None:
-            (take if b is None else keep).append(f)  # new upstream file / deleted by the project: kept deleted
-        elif ours == b:
-            take.append(f)
-        elif b == theirs:
-            keep.append(f)
+            (upd if b is None else kept).append(f)  # new upstream file / deleted by the project: kept deleted
+        elif ours == b or f in take:
+            upd.append(f)
+        elif b == theirs or f in keep:
+            kept.append(f)
         else:
             conflicts.append(f)
     for f in sorted(base_files - set(files)):  # removed upstream: deleted only where the project never changed it
         o_path = os.path.join(dst, f)
-        if installed(f) and f not in PROJECT_OWNED and os.path.exists(o_path) and read(o_path) == at_base(f):
+        if installed(f) and f not in PROJECT_OWNED | GENERATED and os.path.exists(o_path) and read(o_path) == local(f, at_base(f)):
             delete.append(f)
+    if unknown := (keep | take) - set(candidates):
+        sys.exit(f"--keep/--take name files the upgrade does not manage: {', '.join(sorted(unknown))}")
 
-    print(f"  update: {len(take)} · keep the project's change: {len(keep)} · remove (gone upstream): {len(delete)}")
-    for f in take:
-        print(f"    + {f}")
+    print(f"  update: {len(upd)} · keep the project's change: {len(kept)} · remove (gone upstream): {len(delete)}")
+    for f in upd:
+        print(f"    + {f}" + ("   (--take: local changes replaced)" if f in take else ""))
+    for f in sorted(keep & set(kept)):
+        print(f"    = {f}   (--keep: resolved by hand)")
     for f in delete:
         print(f"    - {f}")
     if conflicts:
         print("\nConflicts — nothing written. Both the project and the skeleton changed these files since "
-              f"{have}; merge each by hand, then rerun:")
+              f"{have}. For each: merge it by hand and rerun with `--keep <file>`, or rerun with `--take <file>` to replace "
+              "the local changes with the skeleton's (make sync-skeleton ARGS=\"--keep … --take …\"):")
         for f in conflicts:
             print(f"  - {f}   (upstream change: git -C {src} diff {base} HEAD -- {f})")
         sys.exit(2)
@@ -126,9 +156,13 @@ def upgrade(src: str, dst: str, files: list[str], read, installed, dry_run: bool
         print("\n(dry run: nothing written)")
         return
 
-    for f in take:
+    for f in upd:
         full = os.path.join(dst, f)
         os.makedirs(os.path.dirname(full) or dst, exist_ok=True)
+        if f in EXAMPLE_FILES:
+            with open(full, "w", encoding="utf-8", newline="") as fh:
+                fh.write(local(f, read(os.path.join(src, f))))
+            continue
         with open(os.path.join(src, f), "rb") as a, open(full, "wb") as b:
             b.write(a.read())
     for f in delete:
@@ -164,4 +198,9 @@ def upgrade(src: str, dst: str, files: list[str], read, installed, dry_run: bool
                 sys.exit(1)
     r = subprocess.run([sys.executable, "tools/render_agents.py"], cwd=dst, env=env, capture_output=True, text=True)
     print("  " + (r.stdout.strip() or r.stderr.strip()))
+    gen = os.path.join(dst, "tools", "gen_backlog.py")
+    if os.path.exists(gen) and "--spec-index" in read(gen):  # GENERATED: rebuilt from the project's Specs, Story files untouched
+        r = subprocess.run([sys.executable, "tools/gen_backlog.py", "--spec-index"], cwd=dst, env=env, capture_output=True, text=True)
+        if out := (r.stdout.strip() or r.stderr.strip()):
+            print("  " + out)
     print(f"\nDone: {dst} is at skeleton {new}. Review and commit (git diff --stat), then `make check`.")

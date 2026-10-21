@@ -3,6 +3,12 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.17.1
+- `make sync-skeleton` fixes (#35): the example templates are compared and written with the project's ID prefix; the Spec index is regenerated, never merged (`gen_backlog.py --spec-index`); a conflict is resolved with `ARGS="--keep <file>"` (your hand merge) or `--take <file>` (the skeleton's file); tool tests and `workflow-check.yml` are upgraded where the project has them, never added; new settings of a tool already in `models.toml [tools.<name>]` are added.
+- `make check`: a Closed RUN whose §11 is the old `Addendum` (skeleton before 1.7.0) gets the "no §11 Review" warning, not a review-record error.
+- Tool tests skip the installer/upgrader tests outside the skeleton and no longer assume the skeleton's own package rules or models.
+- **Upgrade**: from 1.16.0 or 1.17.0 nothing to do by hand. From an older version, files patched locally while the skeleton shipped the same change (typically `tools/usage.py`, `tools/wf.py`, the weekly step/template, `workflow/workflow.toml`, `tools/README.md`, the Makefile, `tools/adopt.py`, `tools/tests/test_workflow.py`) conflict: `--take` them unless the change is yours alone.
+
 ## 1.17.0
 - Trunk-based development (mandatory, `delivery/guide/git.md`): `main` is the only long-lived branch, a release is a tag; short-lived story branches updated from `origin/main` before `/persist` and `/close`.
 - `gate_guard.py` blocks creating `release/*`, `develop`, `staging`, `integration` branches; `make next` and `make check` report branches with commits older than `[git] max_branch_age_days` (default 3) not in `main`.

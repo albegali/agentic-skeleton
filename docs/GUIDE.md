@@ -492,6 +492,7 @@ One mechanism for every project, however it was created (template, clone, `make 
 ```bash
 make sync-skeleton ARGS=--dry-run      # the plan: files updated, kept, removed; conflicts
 make sync-skeleton                     # apply it, then review: git diff --stat
+make sync-skeleton ARGS="--keep tools/README.md --take workflow/steps/weekly.md"   # conflicts resolved: yours / the skeleton's
 make check && make test-tools
 ```
 
@@ -499,8 +500,13 @@ make check && make test-tools
 skeleton lives; `SKELETON=<path or URL>` overrides it). For each workflow file the upgrade compares three versions —
 the skeleton's at your version, yours, the skeleton's now — and takes the skeleton's change when you did not touch the
 file, keeps yours when the skeleton did not change it, and **stops before writing anything** when both changed it
-(it prints the upstream diff command for each conflict). Project-owned files are never replaced: `project.toml` and
-`models.toml` only gain the new settings with their defaults; `reference/`, `backlog/`, `PLAN.md`, `analysis/` and
+(it prints the upstream diff command for each conflict). Resolve each conflict, then rerun: merge it by hand and pass
+`--keep <file>` (your merged file is kept; the next upgrade compares from there), or pass `--take <file>` to replace your
+local changes with the skeleton's file. The example templates `inception/templates/stories.toml` and `PLAN.md` are
+compared with your ID prefix, as `/kickoff` wrote them; the Spec index is never merged but regenerated. Tool tests and
+`.github/workflows/workflow-check.yml` are upgraded when your project has them (created from the template), never added.
+Project-owned files are never replaced: `project.toml` and `models.toml` only gain the new settings with their defaults
+(including new settings of a tool you already have in `[tools.<name>]`); `reference/`, `backlog/`, `PLAN.md`, `analysis/` and
 `delivery/` artifacts and `project-journal/` are not touched. Migrations for the versions crossed run once
 (`tools/migrations/`), adapters are re-rendered, and `[skeleton] version` is updated. What changed and anything you
 must do by hand: [`tools/CHANGELOG.md`](../tools/CHANGELOG.md). `make check` warns when `[skeleton] version` and

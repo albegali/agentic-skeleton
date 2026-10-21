@@ -11,6 +11,9 @@ import tomllib
 import unittest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# the installer and the upgrader are never installed in a project (a template clone may carry them): tested only with both
+SKELETON_ONLY = unittest.skipUnless(all(os.path.exists(os.path.join(SRC, "tools", f)) for f in ("adopt.py", "upgrade.py")),
+                                    "needs tools/adopt.py and tools/upgrade.py (skeleton only)")
 if os.environ.get("WF_TEST_TIMEOUT"):  # CI: a hung suite dumps every thread's stack (naming the test) and exits
     import faulthandler
     faulthandler.dump_traceback_later(float(os.environ["WF_TEST_TIMEOUT"]), exit=True)
@@ -341,13 +344,15 @@ class WorkflowTest(unittest.TestCase):
         skill = r.read(".agents/skills/brief/SKILL.md")
         self.assertTrue(skill.startswith("---\nname: brief\ndescription: "))
         self.assertIn("Use only when the user types $brief.", skill)
-        self.assertIn('[profiles.deep]\nmodel = "gpt-5"', r.read(".codex/config.toml"))
+        models = tomllib.loads(r.read("models.toml"))  # the project's own choice in a project created from the skeleton
+        tier = lambda tool, t: models["tools"][tool].get("models", {}).get(t) or models["vendors"][models["tools"][tool]["vendor"]][t]  # noqa: E731
+        self.assertIn(f'[profiles.deep]\nmodel = "{tier("codex", "deep")}"', r.read(".codex/config.toml"))
         prompt = r.read(".github/prompts/run.prompt.md")
         self.assertIn("agent: 'agent'", prompt)
         self.assertNotIn("mode:", prompt)
         self.assertEqual(prompt.count("Arguments"), 1)
         self.assertIn("model: ", r.read(".github/agents/reviewer.agent.md"))
-        self.assertIn("Claude Sonnet 5.5", r.read(".cursor/commands/brief.md"))
+        self.assertIn(tier("cursor", "balanced"), r.read(".cursor/commands/brief.md"))
         n = r.next()
         self.assertEqual((n["commands"]["claude-code"], n["commands"]["codex"]), ("/kickoff", "$kickoff"))
         r.write(".codex/config.toml", 'model = "my-own"\n')  # the project's own Codex config is kept
@@ -375,6 +380,22 @@ class WorkflowTest(unittest.TestCase):
         errors, warnings = check()
         self.assertIn("tools/CHANGELOG.md has no `## 99.0.0` entry for tools/VERSION", errors)
         self.assertTrue(any("[skeleton] version 98.0.0 but the workflow files are 99.0.0" in w for w in warnings))
+
+    def test_a_run_from_before_the_review_step_is_only_warned(self):
+        r, i = self.r, "DM0101"
+        r.through_inception()
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        old = RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 9. Outcome\nGoal achieved:\n- [x] Yes\n"
+        for tail in ("", "# 11. Addendum (Post-Closure Only)\nCI green after closure.\n"):  # old template: no §11, or §11 Addendum
+            with self.subTest(tail=tail[:20]):
+                r.write(f"delivery/30-runs/RUN-{i}.md", old + tail)
+                errors, warnings = EdgeCaseTest.check(self, False)
+                self.assertFalse([e for e in errors if "review record" in e], errors)
+                self.assertTrue(any(f"RUN-{i}: Closed without a §11 Review (RUN from a skeleton before 1.7.0" in w for w in warnings))
+        r.write(f"delivery/30-runs/RUN-{i}.md", old + "# 11. Review\n")
+        self.assertIn(f"RUN-{i}: Closed without a review record (§11 latest `### Review #n` with Date and Outcome `ok-to-close`)",
+                      EdgeCaseTest.check(self, False)[0])
 
     def test_stale_adapter_detected(self):
         with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
@@ -417,7 +438,9 @@ class WorkflowTest(unittest.TestCase):
         r.write("pkg/api/AGENTS.md", "# api rules\n" + "rule\n" * 50)
         r.write("delivery/20-specs/SPEC-DM0101-walking-skeleton.md", SPEC_MD.format(i="DM0101", st="Ready") + "FR-01\n")
         ex = json.loads(r.run("tools/context.py", "execute", "DM0101", "--json").stdout)
-        self.assertEqual([x["path"] for x in ex["package_rules"]], ["pkg/api/AGENTS.md"])
+        rules = [x["path"] for x in ex["package_rules"]]  # in a project: also its own packages' rules
+        self.assertIn("pkg/api/AGENTS.md", rules)
+        self.assertFalse(set(rules) & {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}, rules)
         self.assertIn("FR-01", [s["ref"] for s in ex["sections"]])
         r.write("project-journal/notes/2026-10-01-workshop-x.md", "minutes\n")
         rf = json.loads(r.run("tools/context.py", "refine", "DM0101", "--with", "project-journal/notes/2026-10-01-workshop-x.md", "--json").stdout)
@@ -1269,6 +1292,7 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(r.next("--me", "Bob")["claimable"], ["DM0101"])
 
 
+@SKELETON_ONLY
 class UpgradeTest(unittest.TestCase):
     """make sync-skeleton / adopt.py --upgrade: a 3-way merge against the version the project records."""
 
@@ -1335,6 +1359,81 @@ class UpgradeTest(unittest.TestCase):
         self.assertIn("workflow/steps/close.md", out)
         self.assertEqual(self.read("tools/VERSION").strip(), "9.0.0")
 
+    def commit_skeleton(self) -> None:
+        for a in (("add", "-A"), ("commit", "-qm", "more for 9.1.0")):
+            self.git(self.skel.dir, *a)
+
+    def test_a_conflict_resolved_by_hand_is_kept_or_replaced(self):
+        self.edit(self.proj, "workflow/steps/close.md", "\nLocal change too.\n")
+        self.assertIn("--keep <file>", self.upgrade(False).stdout)
+        self.assertIn("does not manage", self.upgrade(False, "--keep", "nope.md").stderr)
+        self.assertIn("same file", self.upgrade(False, "--keep", "workflow/steps/close.md", "--take", "workflow/steps/close.md").stderr)
+        self.upgrade(True, "--keep", "workflow/steps/close.md")  # the project's merge is the resolution
+        self.assertIn("Local change too.", self.read("workflow/steps/close.md"))
+        self.assertNotIn("Upstream change.", self.read("workflow/steps/close.md"))
+
+    def test_take_replaces_the_local_change(self):
+        self.edit(self.proj, "workflow/steps/close.md", "\nLocal change too.\n")
+        self.assertIn("--take: local changes replaced", self.upgrade(True, "--take", "workflow/steps/close.md").stdout)
+        self.assertIn("Upstream change.", self.read("workflow/steps/close.md"))
+        self.assertNotIn("Local change too.", self.read("workflow/steps/close.md"))
+
+    def test_example_templates_use_the_project_prefix_and_the_spec_index_is_regenerated(self):
+        p = self.proj
+        with open(os.path.join(p, "project.toml"), encoding="utf-8") as f:
+            text = set_key(f.read(), "project", "id_prefix", "DM")
+        with open(os.path.join(p, "project.toml"), "w", encoding="utf-8") as f:
+            f.write(text)
+        for t in ("inception/templates/stories.toml", "inception/templates/PLAN.md"):  # as init_project.py writes them
+            with open(os.path.join(p, t), encoding="utf-8") as f:
+                text = f.read().replace("PR01", "DM01")
+            with open(os.path.join(p, t), "w", encoding="utf-8") as f:
+                f.write(text)
+        os.makedirs(os.path.join(p, "delivery/20-specs"), exist_ok=True)
+        with open(os.path.join(p, "delivery/20-specs/SPEC-DM0101-walking-skeleton.md"), "w", encoding="utf-8") as f:
+            f.write("# SPEC-DM0101 - Walking skeleton\n## Status\nDone\n")
+        with open(os.path.join(p, "delivery/20-specs/README.md"), "w", encoding="utf-8") as f:
+            f.write("# Spec index\n\n| DM0101 | kept by hand |\n")
+        self.edit(self.skel.dir, "inception/templates/stories.toml", "\n# upstream note\n")
+        self.edit(self.skel.dir, "delivery/20-specs/README.md", "\nupstream wording\n")
+        self.commit_skeleton()
+        out = self.upgrade().stdout
+        self.assertIn("regenerated delivery/20-specs/README.md", out)
+        stories = self.read("inception/templates/stories.toml")
+        self.assertIn('id = "DM0101"', stories)
+        self.assertIn("# upstream note", stories)
+        self.assertNotIn("PR0101", stories)
+        index = self.read("delivery/20-specs/README.md")
+        self.assertIn("| [DM0101](SPEC-DM0101-walking-skeleton.md) | Walking skeleton | Done | — |", index)
+        self.assertNotIn("upstream wording", index)
+
+    def test_tool_tests_and_tool_settings_are_upgraded_where_the_project_has_them(self):
+        self.edit(self.skel.dir, "tools/tests/test_portal.py", "\n# upstream test change\n")
+        self.skel.write("tools/tests/test_new.py", "# a new upstream test\n")
+        self.edit(self.skel.dir, ".github/workflows/workflow-check.yml", "\n# upstream CI change\n")
+        self.edit(self.skel.dir, "tools/adopt.py", "\n# upstream installer change\n")
+        m = self.skel.read("models.toml")
+        self.skel.write("models.toml", m.replace("[tools.cursor]\n", "[tools.cursor]\nnewopt = true   # new setting\n", 1))
+        self.commit_skeleton()
+        self.upgrade()
+        self.assertIn("# upstream test change", self.read("tools/tests/test_portal.py"))
+        self.assertIn("# a new upstream test", self.read("tools/tests/test_new.py"))
+        self.assertIn("# upstream CI change", self.read(".github/workflows/workflow-check.yml"))
+        self.assertIn("# upstream installer change", self.read("tools/adopt.py"))
+        models = tomllib.loads(self.read("models.toml"))
+        self.assertIs(models["tools"]["cursor"]["newopt"], True)
+        self.assertEqual(models["tools"]["cursor"]["vendor"], "anthropic")
+
+    def test_tool_tests_and_ci_are_never_added(self):
+        shutil.rmtree(os.path.join(self.proj, "tools/tests"))
+        shutil.rmtree(os.path.join(self.proj, ".github/workflows"))
+        for f in ("tools/adopt.py", "tools/upgrade.py"):
+            os.remove(os.path.join(self.proj, f))
+        self.upgrade()
+        self.assertFalse(any(os.path.exists(os.path.join(self.proj, f)) for f in ("tools/adopt.py", "tools/upgrade.py")))
+        self.assertFalse(os.path.exists(os.path.join(self.proj, "tools/tests")))
+        self.assertFalse(os.path.exists(os.path.join(self.proj, ".github/workflows/workflow-check.yml")))
+
 
 class LaunchTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -1367,6 +1466,7 @@ class LaunchTest(unittest.TestCase):
         self.assertEqual(self.r.run("tools/launch.py", ok=False).returncode, 3)
 
 
+@SKELETON_ONLY
 class AdoptTest(unittest.TestCase):
     """tools/adopt.py on an existing repository, then the brownfield path of next_step."""
 

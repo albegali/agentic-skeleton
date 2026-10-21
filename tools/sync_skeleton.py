@@ -2,8 +2,8 @@
 """Bring this project's workflow files up to the skeleton's latest version (the one sync mechanism; no merges of
 skeleton branches, no copied patches).
 
-Usage: make sync-skeleton [SKELETON=<path or git URL>] [ARGS=--dry-run]
-       python3 tools/sync_skeleton.py [--from <path or URL>] [--dry-run]
+Usage: make sync-skeleton [SKELETON=<path or git URL>] [ARGS="--dry-run | --keep <file> | --take <file>"]
+       python3 tools/sync_skeleton.py [--from <path or URL>] [--dry-run] [--keep <file>]… [--take <file>]…
 
 Source: --from, else project.toml [skeleton] source, else the public skeleton. A URL is cloned (full history: the
 upgrade needs the commit of the version this project records) into a temporary directory. Then the skeleton's
@@ -26,6 +26,8 @@ def main() -> None:
     argv = sys.argv[1:]
     src = argv[argv.index("--from") + 1] if "--from" in argv[:-1] else (wf.project().get("skeleton", {}).get("source") or DEFAULT)
     rest = [a for a in argv if a == "--dry-run"]
+    for opt in ("--keep", "--take"):  # conflicts resolved by hand / by the skeleton's file (repeatable)
+        rest += [x for k, a in enumerate(argv[:-1]) if a == opt for x in (opt, argv[k + 1])]
     with tempfile.TemporaryDirectory(prefix="skeleton-") as tmp:
         if not os.path.isdir(src):
             print(f"cloning {src} …")

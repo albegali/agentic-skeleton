@@ -28,7 +28,7 @@ approve:         ## YOU pass a human gate, committed alone with Approved-by/at: 
 claim:           ## team use: claim a story (branch, claim in stories.toml, push): make claim ID=PR0101 [WORKTREE=1] [ME="name"]
 	@$(PY) tools/claim.py "$(ID)" $(if $(WORKTREE),--worktree) $(if $(ME),--me "$(ME)")
 
-sync-skeleton:   ## upgrade the workflow files to the latest skeleton (3-way, nothing written on conflict): [SKELETON=<path|url>] [ARGS=--dry-run]
+sync-skeleton:   ## upgrade the workflow files to the latest skeleton (3-way, nothing written on conflict): [SKELETON=<path|url>] [ARGS="--dry-run | --keep <file> | --take <file>"]
 	@$(PY) tools/sync_skeleton.py $(if $(SKELETON),--from "$(SKELETON)") $(ARGS)
 
 gates:           ## quality gates of project.toml [gates] + [stack] test/lint, written into RUN §8: make gates ID=PR0101
