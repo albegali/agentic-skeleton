@@ -93,6 +93,8 @@ def main() -> None:
                  ("language", a.language), ("owner", a.owner)):
         p = set_key(p, "project", k, v)
     p = set_key(p, "inception", "mockup", not a.no_mockup)
+    if not wf.project().get("skeleton", {}).get("version") and wf.exists("tools/VERSION"):  # the version this project starts from
+        p = set_key(p, "skeleton", "version", wf.read("tools/VERSION").strip())
     if a.sources is not None:
         p = set_key(p, "inception", "sources", [x for x in srcs if x != design])
     if design is not None:

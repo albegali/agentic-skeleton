@@ -77,6 +77,13 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
     for src in wf.sources() + ([wf.design()] if wf.design() else []):
         if not wf.exists(src):
             W.append(f"project.toml [inception] source not found: {src}")
+    ver = wf.read("tools/VERSION").strip() if wf.exists("tools/VERSION") else ""
+    if ver and wf.exists("tools/CHANGELOG.md") and not re.search(rf"^##\s+{re.escape(ver)}\s*$", wf.read("tools/CHANGELOG.md"), re.M):
+        E.append(f"tools/CHANGELOG.md has no `## {ver}` entry for tools/VERSION")
+    pinned = wf.project().get("skeleton", {}).get("version")
+    if ver and pinned and pinned != ver:
+        W.append(f"project.toml [skeleton] version {pinned} but the workflow files are {ver} (tools/VERSION): "
+                 "partial or manual sync? run `make sync-skeleton`, or correct the version")
     g = wf.project().get("git", {})
     q = wf.project().get("gates", {})
     if not isinstance(q.get("coverage_min", 0), (int, float)) or not 0 <= q.get("coverage_min", 0) <= 100:
@@ -365,6 +372,10 @@ def check_chain() -> None:
                 E.append(f"RUN-{i}: Closed with failing gates (§8 Gates): {', '.join(failing)}")
             elif gl is None and "- Tests:" in t and quality_gates.configured():  # RUNs from the 1.11 template on
                 W.append(f"RUN-{i}: Closed without `make gates` results (§8 Gates) although gates are configured")
+        if s == "Closed" and (pend := wf.pending_actions(t)) and re.search(r"^\s*-\s*\[[xX]\]\s*Yes\b", wf.heading_section(t, r"^#\s+9\.") or "", re.M):
+            E.append(f"RUN-{i}: Closed with Goal achieved `Yes` while owner actions are pending: {'; '.join(pend)} (use Partial, or do them)")
+        if s == "Closed" and stories.get(i, {}).get("repo") and not re.search(r"^\s*-\s*Upstream:[ \t]*[^\s(]", t, re.M):
+            W.append(f"RUN-{i}: story in repo {stories[i]['repo']!r}: record the upstream commit or tag in RUN References `Upstream:`")
         acc = re.search(r"^Tuning accepted by:[ \t]*(.*)$", t, re.M)
         if s in ("Persisted", "Reviewed", "Closed") and acc and not acc.group(1).strip():
             W.append(f"RUN-{i}: {s} without `Tuning accepted by` (§5): record who accepted the result and when")

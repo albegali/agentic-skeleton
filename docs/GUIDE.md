@@ -487,21 +487,29 @@ Never edit generated files (`.claude/commands`, `.agents/skills`, `.codex/prompt
 
 ## 12. Pulling skeleton updates into your project
 
-If you used Option B (§3), the skeleton is a remote:
+One mechanism for every project, however it was created (template, clone, `make adopt`):
 
 ```bash
-git fetch skeleton
-git merge skeleton/main
-make agents && make check && make test-tools
+make sync-skeleton ARGS=--dry-run      # the plan: files updated, kept, removed; conflicts
+make sync-skeleton                     # apply it, then review: git diff --stat
+make check && make test-tools
 ```
 
-What to expect in the merge:
+`project.toml [skeleton] version` records the skeleton version your workflow files come from (`source` says where the
+skeleton lives; `SKELETON=<path or URL>` overrides it). For each workflow file the upgrade compares three versions —
+the skeleton's at your version, yours, the skeleton's now — and takes the skeleton's change when you did not touch the
+file, keeps yours when the skeleton did not change it, and **stops before writing anything** when both changed it
+(it prints the upstream diff command for each conflict). Project-owned files are never replaced: `project.toml` and
+`models.toml` only gain the new settings with their defaults; `reference/`, `backlog/`, `PLAN.md`, `analysis/` and
+`delivery/` artifacts and `project-journal/` are not touched. Migrations for the versions crossed run once
+(`tools/migrations/`), adapters are re-rendered, and `[skeleton] version` is updated. What changed and anything you
+must do by hand: [`tools/CHANGELOG.md`](../tools/CHANGELOG.md). `make check` warns when `[skeleton] version` and
+`tools/VERSION` disagree (a partial or manual sync).
 
-| Skeleton-owned (take theirs unless you customized it) | Project-owned (keep yours) |
-|---|---|
-| `tools/`, `workflow/steps/`, `workflow/workflow.toml`, templates, `AGENTS.md`, guides, `Makefile` | `project.toml`, `models.toml`, `reference/`, `backlog/`, `PLAN.md`, `analysis/` and `delivery/` artifacts, `project-journal/` |
-
-Resolve generated files by running `make agents` rather than merging them by hand. With Options A or C, compare the skeleton's `tools/` and `workflow/` against yours and copy over what you want.
+A story whose code belongs to another repository (e.g. a fix for the skeleton found while building your project):
+`repo = "<name>"` on the story; the RUN records the commit or tag there in References `Upstream:`. Actions only a
+person can do (a tag, a release, a setting) go in the RUN's `## Pending owner actions`: `make next` lists the open ones,
+and a RUN cannot close with Goal achieved `Yes` while one is open.
 
 ---
 

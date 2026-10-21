@@ -30,6 +30,12 @@ coverage_min = 0             # percent; 0 = any value passes
 secrets = true               # tools/secret_scan.py on the story's files
 mutation = ""                # optional, slow
 
+[skeleton]
+# The skeleton version this project's workflow files come from (set by /kickoff, tools/adopt.py and the upgrade).
+# Update with `make sync-skeleton` (tools/sync_skeleton.py): a 3-way merge, nothing written on conflict.
+version = ""
+source = ""                  # skeleton repository (URL or path); default https://github.com/albegali/agentic-skeleton
+
 [portal]
 # Agentic portal, started by `make portal` (tools/portal.py). Uncomment to pin a release:
 # version = "x.y.z"

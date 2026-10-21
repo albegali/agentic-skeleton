@@ -208,6 +208,12 @@ def same_person(a: str | None, b: str | None) -> bool:
     return bool(a and b) and a.strip().lower() == b.strip().lower()
 
 
+def pending_actions(text: str) -> list[str]:
+    """Open owner actions of a RUN: unticked lines of `## Pending owner actions` (`- [ ] <action> — owner: … — since: …`)."""
+    sec = heading_section(text, r"^##\s+Pending owner actions\b") or ""
+    return [m.strip() for m in re.findall(r"^\s*-\s*\[ \]\s*(\S.*)$", sec, re.M) if not m.strip().startswith("<")]
+
+
 def security_nfrs() -> set[str]:
     """NFR IDs filed under the Security or Privacy heading of the NFR file (FR-1 = FR-01 normalised to NFR-01)."""
     p = "reference/product/non-functional-requirements.md"
@@ -278,7 +284,7 @@ def backlog_errors() -> list[str]:
         for k in STORY_LINKS:
             if k in s and not (isinstance(s[k], str) and s[k]):
                 out.append(f"{who}: `{k}` must be a story ID")
-        for k in ("claimed_by", "claimed_at"):
+        for k in ("claimed_by", "claimed_at", "repo"):
             if k in s and not (isinstance(s[k], str) and s[k].strip()):
                 out.append(f"{who}: `{k}` must be a non-empty string")
         for flag in ("skip_analysis", "security"):
