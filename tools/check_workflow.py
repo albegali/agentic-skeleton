@@ -443,8 +443,9 @@ def check_approval_order() -> None:
     """--git: on a story branch, the commit that records the strategy approval (RUN §2) precedes every code commit and
     holds no code itself. Code = any path outside the workflow artifacts (tools/gates.py WORKFLOW_PATHS)."""
     import gates
-    base = os.environ.get("WF_BASE") or (f"origin/{os.environ['GITHUB_BASE_REF']}" if os.environ.get("GITHUB_BASE_REF") else "main")
-    if git("rev-parse", "--verify", "--quiet", base) is None:
+    tries = [os.environ.get("WF_BASE"), f"origin/{os.environ['GITHUB_BASE_REF']}" if os.environ.get("GITHUB_BASE_REF") else None, "origin/main", "main"]
+    base = next((b for b in tries if b and git("rev-parse", "--verify", "--quiet", b) is not None), None)
+    if base is None:
         return
     commits = (git("rev-list", "--reverse", "--no-merges", f"{base}..HEAD") or "").split()
     if not commits:
