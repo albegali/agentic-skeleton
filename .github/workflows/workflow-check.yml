@@ -1,5 +1,11 @@
 name: workflow-check
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]  # branches are checked through their pull request: one run per commit, not two
+  pull_request:
+concurrency:  # a newer commit on the same PR (or main) cancels the run of the older one
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
