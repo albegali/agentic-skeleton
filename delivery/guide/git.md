@@ -4,7 +4,7 @@ Every other file links here instead of restating the rule.
 
 ## Branch
 - One branch per story: `<id-lowercase>-<slug>` (e.g. `pr0101-login`), created from an up-to-date `main` before the first change of the RUN. Spikes use `spike/<id-lowercase>` and are never merged.
-- Commit and push only at the end of `/persist` and `/close`, or when the user asks. The review's RUN §11 entry is committed by the next of the two.
+- Commit and push only at the end of `/persist` and `/close`, or when the user asks. One exception: the strategy approval is committed alone (RUN + Spec, `Approved-by`/`Approved-at` trailers) before any code — by `make approve` or by `/run <ID> approve`; CI (`check_workflow.py --git`) fails a branch whose code precedes it. The review's RUN §11 entry is committed by the next of the two.
 - Attribution: `project.toml` `[git] trailers`. `none` (default) → no `Co-Authored-By:` trailer and no "Generated with …" line in commit messages or PR bodies, even if the tool adds them by default; `tool` → keep the tool's default lines.
 
 ## `/persist` — the story's PR, nothing merged

@@ -10,7 +10,8 @@ Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist
 Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN/spike note; Spec ↔ Brief; RUN ↔ Spec; status values; approval
            before execution; Persistence (§7) before Closed; a §11 `ok-to-close` review before Reviewed/Closed; Blocked
            RUN without an open §6 deviation; RUN still open on a cancelled story; Spec Done / RUN Closed with an unchecked
-           acceptance criterion or gate; template placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
+           acceptance criterion or gate; template placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line;
+           on a story branch, code committed before or with the RUN §2 approval (base: $WF_BASE, origin/$GITHUB_BASE_REF or main).
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
            (same exit code: a workflow with errors is still a successful check, reported in data).
@@ -398,6 +399,37 @@ def check_revisions() -> None:
                 W.append(f"{r}: changed after closure ({closed_at[0][:7]}) without a new line under `## Revisions`")
 
 
+def check_approval_order() -> None:
+    """--git: on a story branch, the commit that records the strategy approval (RUN §2) precedes every code commit and
+    holds no code itself. Code = any path outside the workflow artifacts (tools/gates.py WORKFLOW_PATHS)."""
+    import gates
+    tries = [os.environ.get("WF_BASE"), f"origin/{os.environ['GITHUB_BASE_REF']}" if os.environ.get("GITHUB_BASE_REF") else None, "origin/main", "main"]
+    base = next((b for b in tries if b and git("rev-parse", "--verify", "--quiet", b) is not None), None)
+    if base is None:
+        return
+    commits = (git("rev-list", "--reverse", "--no-merges", f"{base}..HEAD") or "").split()
+    if not commits:
+        return
+
+    def code(c: str) -> list[str]:
+        files = (git("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", c) or "").split("\n")
+        return [f for f in files if f and not f.startswith(gates.WORKFLOW_PATHS)]
+    first_code = next(((c, f) for c in commits if (f := code(c))), None)
+    for p in wf.matches("delivery/30-runs/RUN-*.md"):
+        r = wf.rel(p)
+        if not wf.run_approved(wf.read(p)):
+            continue
+        approved_at = next((c for c in commits if (old := git("show", f"{c}:{r}")) is not None and wf.run_approved(old)), None)
+        if approved_at is None:
+            continue  # approved before this branch
+        i = os.path.basename(r)[4:].split(".")[0]
+        if first_code and commits.index(first_code[0]) <= commits.index(approved_at):
+            E.append(f"RUN-{i}: code committed {'with' if first_code[0] == approved_at else 'before'} the strategy approval "
+                     f"({first_code[0][:7]}: {', '.join(first_code[1][:3])}): commit the approval alone first, then the code")
+        if "Approved-by:" not in (git("log", "-1", "--format=%B", approved_at) or ""):
+            W.append(f"RUN-{i}: strategy approval commit {approved_at[:7]} has no `Approved-by:` trailer")
+
+
 def check_adapters() -> None:
     for p in render_agents.check(render_agents.render()):
         E.append(f"stale adapter (run `make agents`): {p}")
@@ -419,7 +451,7 @@ def main() -> None:
     fr, nfr, prio = check_inception()
     tag("inception", 0, 0)
     steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index)]
-    steps += [("chain", check_revisions)] if "--git" in sys.argv else []
+    steps += [("chain", check_revisions), ("chain", check_approval_order)] if "--git" in sys.argv else []
     for area, fn in steps + [("adapters", check_adapters)]:
         ne, nw = len(E), len(W)
         fn()

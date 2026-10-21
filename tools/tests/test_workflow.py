@@ -968,6 +968,121 @@ LEGACY = {  # a 10-year-old AngularJS frontend, no backend, its own rules and to
 }
 
 
+class GateTest(unittest.TestCase):
+    """Human gates: the agent hook, `make approve` and the approval-before-code check."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+        self.r.through_inception()
+        self.i = "DM0101"
+        r, i = self.r, self.i
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Draft", plan="build", ok=" ").replace("- [ ] Approved\n", "- [ ] Approved\nReviewer:\nDate:\n"))
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def guard(self, tool: str, inp: dict, prompt: str | None = None) -> subprocess.CompletedProcess:
+        ev = {"tool_name": tool, "tool_input": inp}
+        if prompt is not None:
+            tr = os.path.join(self.r.dir, ".transcript.jsonl")
+            with open(tr, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "user", "userType": "external", "message": {"role": "user", "content": prompt}}) + "\n")
+            ev["transcript_path"] = tr
+        return subprocess.run([sys.executable, "tools/gate_guard.py"], cwd=self.r.dir, env=self.r.env, input=json.dumps(ev),
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_guard_blocks_gate_edits_unless_the_human_typed_the_gate_command(self):
+        r, i = self.r, self.i
+        run = os.path.join(r.dir, f"delivery/30-runs/RUN-{i}.md")
+        tick = {"file_path": run, "old_string": "- [ ] Approved", "new_string": "- [x] Approved"}
+        blocked = self.guard("Edit", tick)
+        self.assertEqual(blocked.returncode, 2)
+        self.assertIn(f"make approve ID={i} GATE=strategy", blocked.stderr)
+        self.assertEqual(self.guard("Edit", tick, "ok, go ahead").returncode, 2)  # free text is not the gate command
+        cmd = "<command-message>run</command-message>\n<command-name>/run</command-name>\n<command-args>{}</command-args>"
+        self.assertEqual(self.guard("Edit", tick, cmd.format(f"{i} approve")).returncode, 0)
+        self.assertEqual(self.guard("Edit", tick, cmd.format("DM0102 approve")).returncode, 2)
+        self.assertEqual(self.guard("Edit", {**tick, "new_string": "- [ ] Approved\n"}).returncode, 0)  # no gate passed
+        spec = os.path.join(r.dir, f"delivery/20-specs/SPEC-{i}-walking-skeleton.md")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        self.assertEqual(self.guard("Write", {"file_path": spec, "content": SPEC_MD.format(i=i, st="Ready")}).returncode, 2)
+        vision = os.path.join(r.dir, "reference/product/vision.md")
+        r.write("reference/product/vision.md", "---\nstatus: draft\n---\n# Vision\n")
+        edit = {"file_path": vision, "old_string": "status: draft", "new_string": "status: approved"}
+        self.assertIn("make approve GATE=inception FILE=reference/product/vision.md", self.guard("Edit", edit).stderr)
+        edit = {"file_path": os.path.join(r.dir, "project.toml"), "old_string": "decided = true", "new_string": "decided = true"}
+        self.assertEqual(self.guard("Edit", edit).returncode, 0)
+
+    def test_guard_keeps_each_mode_in_its_paths_and_blocks_risky_shell(self):
+        r = self.r
+        analysis = "<command-name>/analysis</command-name>\n<command-args>DM0101</command-args>"
+        w = lambda p: {"file_path": os.path.join(r.dir, p), "content": "x\n"}
+        self.assertEqual(self.guard("Write", w("analysis/20-analysis/ANALYSIS_DM0101_x.md"), analysis).returncode, 0)
+        self.assertIn("analyst mode", self.guard("Write", w("delivery/10-briefs/BRIEF-DM0101-x.md"), analysis).stderr)
+        review = "<command-name>/review-story</command-name>\n<command-args>DM0101</command-args>"
+        self.assertEqual(self.guard("Write", w("src/app.py"), review).returncode, 2)
+        self.assertEqual(self.guard("Write", w("src/app.py"), "<command-name>/run</command-name>").returncode, 0)
+        for cmd, code in (("make approve ID=DM0101 GATE=spec", 2), ("git push --force-with-lease", 2), ("gh pr merge 4 --admin --squash", 2),
+                          ("cat .env", 2), ("git push -u origin dm0101-x", 0), ("python3 - <<'EOF'\nprint('make approve')\nEOF", 0)):
+            self.assertEqual(self.guard("Bash", {"command": cmd}).returncode, code, cmd)
+
+    def git(self, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
+
+    def test_make_approve_commits_the_gate_alone_and_ci_checks_the_order(self):
+        r, i = self.r, self.i
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Pat Owner")
+        self.git("config", "user.email", "pat@example.org")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("switch", "-qc", "dm0101-walking-skeleton")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        r.run("tools/approve.py", "--gate", "spec", "--id", i.lower(), "--no-commit")
+        self.assertIn("Ready", r.read(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md"))
+        self.assertIn("already passed", r.run("tools/approve.py", "--gate", "spec", "--id", i, ok=False).stderr)
+        r.write("src/app.py", "print('hi')\n")  # untracked code: not part of the approval commit
+        out = r.run("tools/approve.py", "--gate", "strategy", "--id", i).stdout
+        self.assertIn(f"approve(strategy): {i}", out)
+        body = self.git("log", "-1", "--format=%B")
+        self.assertIn("Approved-by: Pat Owner <pat@example.org>", body)
+        self.assertIn("Approved-at: ", body)
+        self.assertEqual(sorted(self.git("show", "--name-only", "--format=", "HEAD").split()),
+                         [f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", f"delivery/30-runs/RUN-{i}.md"])
+        run = r.read(f"delivery/30-runs/RUN-{i}.md")
+        self.assertIn("- [x] Approved", run)
+        self.assertIn("Reviewer: Pat Owner", run)
+        self.assertIn("Strategy Approved", run)
+        self.git("add", "src/app.py")
+        self.git("commit", "-qm", "code")
+        ok = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
+        self.assertFalse([x for x in ok if "strategy approval" in x["message"]], ok)
+        # code committed together with the approval: an error in CI
+        self.git("reset", "-q", "--hard", "main")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Executing", plan="build", ok="x"))
+        r.write("src/app.py", "print('hi')\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "everything at once")
+        issues = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
+        msgs = " ".join(x["message"] for x in issues)
+        self.assertIn(f"RUN-{i}: code committed with the strategy approval", msgs)
+        self.assertIn("has no `Approved-by:` trailer", msgs)
+
+    def test_hook_is_rendered_once_and_kept_next_to_the_projects_own(self):
+        r = self.r
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertIn("gate_guard.py", json.dumps(s["hooks"]))
+        own = {"type": "command", "command": "echo mine"}
+        s["hooks"]["PreToolUse"].append({"matcher": "Read", "hooks": [own]})
+        r.write(".claude/settings.json", json.dumps(s))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(len(s["hooks"]["PreToolUse"]), 2)
+        self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
+
+
 class LaunchTest(unittest.TestCase):
     def setUp(self) -> None:
         self.r = Repo()
