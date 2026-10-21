@@ -9,6 +9,7 @@ concurrency:  # a newer commit on the same PR (or main) cancels the run of the o
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.11", "3.14"]  # baseline and latest; the tools stay stdlib-only
@@ -23,6 +24,9 @@ jobs:
       - run: make test-tools
   other-os:  # all tools tests on the other OSes (NFR-10; Linux is covered above): paths, console encoding, launcher
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      WF_TEST_TIMEOUT: "300"  # seconds: a hang dumps the stacks instead of running until the job timeout
     strategy:
       fail-fast: false
       matrix:

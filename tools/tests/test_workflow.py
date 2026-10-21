@@ -10,6 +10,9 @@ import tempfile
 import unittest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if os.environ.get("WF_TEST_TIMEOUT"):  # CI: a hung suite dumps every thread's stack (naming the test) and exits
+    import faulthandler
+    faulthandler.dump_traceback_later(float(os.environ["WF_TEST_TIMEOUT"]), exit=True)
 sys.path.insert(0, os.path.join(SRC, "tools"))
 from init_project import set_key  # noqa: E402
 
