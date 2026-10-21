@@ -12,6 +12,10 @@
 #   run_max   max lines printed per `run` command (default 80)
 #   sources   true: add the kickoff sources recorded in project.toml [inception] sources
 #   design    true: point to the existing design in project.toml [inception] design (outline, not the whole file)
+#   package_rules  true: list the package AGENTS.md files with their size (counted in the budget)
+# Steps: deep_command = "<command>" is used instead of `command` (with the deep tier) for L/XL stories.
+#   diff      true: size and --stat of the story branch diff against main (file by file when large)
+# Files passed to a step (workshop minutes, sources): `tools/context.py <step> <IDs> --with <file>`.
 
 # ------------------------------------------------------------------ inception (product mode)
 
@@ -118,6 +122,7 @@ command = "refine"
 tier = "balanced"
 session = "fresh; stories of the same workshop together (max 4)"
 read = ["analysis/AGENT_GUIDE.md", "analysis/templates/REFINED-template.md", "analysis/10-stories/STORY_{ID}_*.md", "analysis/20-analysis/ANALYSIS_{ID}_*.md"]
+refs_from = ["analysis/20-analysis/ANALYSIS_{ID}_*.md"]
 
 # ------------------------------------------------------------------ delivery (developer mode)
 
@@ -142,7 +147,7 @@ session = "fresh; stays open for approval and execution"
 read = ["delivery/guide/quick.md", "delivery/templates/BRIEF-template.md", "delivery/templates/SPEC-template.md", "delivery/templates/RUN-template.md"]
 first = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
 refs_from = ["analysis/10-stories/STORY_{ID}_*.md"]
-run = ["python3 tools/context.py --package-rules"]
+package_rules = true
 
 [steps.spike]
 title = "Spike: time-boxed investigation, findings note and follow-up stories (no code merged)"
@@ -171,10 +176,11 @@ mode = "developer"
 command = "run"
 tier = "balanced"
 deep_when = "story size L/XL or new architecture"
+deep_command = "run-deep"    # next_step routes L/XL stories here (deep tier)
 session = "fresh; stays open for approval and execution"
 read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/templates/RUN-template.md", "delivery/guide/run.md"]
 refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
-run = ["python3 tools/context.py --package-rules"]
+package_rules = true
 
 [steps.run-approval]
 title = "Human approval of the RUN strategy"
@@ -187,13 +193,29 @@ owner = "agent"
 mode = "developer"
 command = "run"
 tier = "balanced"
-session = "same as the strategy if under ~50% context; otherwise fresh (the RUN is the memory)"
+deep_command = "run-deep"
+session = "same as the strategy while the session is under ~80k tokens; otherwise /clear, then /run <ID> (the RUN is the memory)"
 read = ["delivery/30-runs/RUN-{ID}.md", "delivery/20-specs/SPEC-{ID}-*.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
 
 [steps.tuning]
 title = "Human verification, tuning within scope, persistence"
 owner = "human"
 mode = "developer"
+
+[steps.security]
+title = "Security review of a security-sensitive story (RUN §8 Security review), before the independent review"
+owner = "agent"
+mode = "review"
+command = "security-review"
+tier = "balanced"
+session = "fresh"
+read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/30-runs/RUN-{ID}.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
+diff = true
+run = ["python3 tools/secret_scan.py --branch"]
 
 [steps.review]
 title = "Independent review before closure (RUN §11: Reviewed, or back to Tuning)"
@@ -203,6 +225,9 @@ command = "review-story"
 tier = "balanced"
 session = "fresh (fresh eyes)"
 read = ["delivery/10-briefs/BRIEF-{ID}-*.md", "delivery/20-specs/SPEC-{ID}-*.md", "delivery/30-runs/RUN-{ID}.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
+diff = true
 run = ["make check"]
 
 [steps.close]
@@ -230,10 +255,10 @@ command = "weekly"
 tier = "fast"
 session = "fresh"
 read = ["project-journal/templates/weekly.md", "project-journal/notes/current-week.md"]
-run = ["git log --since='7 days ago' --oneline", "python3 tools/next_step.py"]
+run = ["git log --since='7 days ago' --format='%h %ad %s' --date=short", "python3 tools/next_step.py", "python3 tools/usage.py --days 7"]
 
 # ================================================================== commands
-# body: the prompt. $ARGUMENTS is replaced with each tool's argument syntax.
+# body: the prompt. $ARGUMENTS is replaced with each tool's argument syntax. body_from = "<command>": reuse that command's body.
 # tools: Claude Code allowed-tools (optional; omitted = default permissions).
 
 [commands.next]
@@ -271,7 +296,7 @@ body = """
 Arguments: $ARGUMENTS
 1. Read `models.toml`. Show a compact table tier × enabled tool with the current model, and mark entries flagged "verify".
 2. Ask the user, one question per tool, which model to use per tier (offer the current value as default; propose the vendor's latest small / mid / large model for fast / balanced / deep). If a web search tool is available, verify the current model names first.
-3. Update `models.toml` (keep comments), run `make agents`, then `make check`.
+3. Update `models.toml` (keep comments), run `make agents`. If the balanced model changed, also set `"model"` in `.claude/settings.json` to it (session default for follow-ups), unless the user wants to keep their own. Then `make check`.
 Chat: the final table, nothing else.
 """
 
@@ -384,15 +409,22 @@ body = """
 Arguments: $ARGUMENTS.
 
 - ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
-- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
+- `approve` (typed by the human) → on the story branch (create it now if missing, `delivery/guide/git.md`): record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`; commit these two files alone, with the trailers `Approved-by: <owner> (via /run approve)` and `Approved-at: <ISO datetime>`; then follow `workflow/steps/execute.md`. If the human already ran `make approve … GATE=strategy`, just execute. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
 - `revise: …` → update only the strategy (untick `Stopped` in §2, status `Draft`, note the request in §2) and stop again.
 - ID only with an approved strategy → resume following `workflow/steps/execute.md`.
 - `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`); a `Persisted` or `Reviewed` RUN goes back to `Tuning` (then `/persist` again).
 - `approve-deviation <n>` → fill `Approved by` (`project.toml` owner) and `Date` of RUN §6 `Deviation #<n>`; if the Spec is not `In Progress` or `Ready`, stop and say what the Spec still needs. Otherwise apply its plan impact to §1 as new steps, RUN `Executing`, Spec `In Progress`, resume following `workflow/steps/execute.md`.
 - `cancel: <reason>` → the owner dropped the story: `status = "cancelled"` on the story in `backlog/stories.toml` (reason in `notes`); RUN (if any) `Cancelled` with the reason in §9 and code changes reverted or listed there; Spec (if any) `Cancelled`; Brief `Superseded`. No new RUN.
 
-Use the deep tier only if the user asked for it or the story is L/XL.
+L/XL stories run through `/run-deep <ID>` (same procedure, deep tier); otherwise use the deep tier only if the user asked for it.
 """
+
+[commands.run-deep]
+description = "Developer mode — /run on the deep tier, for L/XL stories (same arguments and procedure)"
+args = "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
+tier = "deep"
+mode = "developer"
+body_from = "run"
 
 [commands.persist]
 description = "Developer mode — persistence/reconciliation, story PR and CI result (RUN → Persisted; nothing merged)"
@@ -402,9 +434,9 @@ mode = "developer"
 body = """
 Developer mode, ID $ARGUMENTS (`delivery/AGENT_GUIDE.md` §5, step 7).
 1. Update the Spec (§11) and only the `reference/` docs touched by the story.
-2. Complete RUN §7-10 and set it `Persisted` (not `Closed`: review and `/close` follow); Spec status `Done`. Tasks split off into new stories (`split_from`) are listed under §9 Tasks deferred with the new ID.
-3. Update `delivery/20-specs/README.md`. Run `make check`.
-4. Git: the `/persist` part of `delivery/guide/git.md` — commit, push the story branch, open its PR, wait for the required checks, record `CI:` in RUN §8 and push it. Merge nothing.
+2. RUN: §5 `Tuning accepted by` (the human who ran `/persist`, from `project.toml` owner unless they said otherwise) and `Date`; §7-10 (§8 as facts: AC n/n, `Tests:` command → result, out-of-scope changes, `CI:`); status `Persisted` (not `Closed`: review and `/close` follow). Spec §11 facts and status `Done`. Tasks split off into new stories (`split_from`) are listed under §9 Tasks deferred with the new ID.
+3. `make gates ID=$ARGUMENTS` (writes RUN §8 `### Gates`; a failing gate → stop, RUN stays `Tuning`), `make backlog` (Spec index), then `make check`.
+4. Git: the `/persist` part of `delivery/guide/git.md` — commit, push the story branch, open its PR (RUN References `Branch`, `PR`), wait for the required checks, record `CI:` in RUN §8 and push it. Merge nothing.
 Chat: outcome in 3 lines, then `/review-story <ID>` in a fresh session.
 """
 
@@ -414,6 +446,13 @@ args = "<ID>"
 tier = "fast"
 mode = "developer"
 body = "Follow `workflow/steps/close.md` with {ID} = $ARGUMENTS."
+
+[commands.security-review]
+description = "Review mode — security review of a security-sensitive story before /review-story; records the outcome in RUN §8"
+args = "<ID>"
+tier = "balanced"
+mode = "review"
+body = "Follow `workflow/steps/security.md` with {ID} = $ARGUMENTS."
 
 [commands.review-story]
 description = "Review mode — independent review of one story before closure; records the outcome in RUN §11"

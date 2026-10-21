@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from the vision and sources"
 model: "Claude Sonnet 5.5"
 ---

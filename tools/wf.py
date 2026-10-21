@@ -163,6 +163,96 @@ def skips_analysis(s: dict) -> bool:
     if "skip_analysis" in s:
         return s["skip_analysis"] is True
     return s.get("type") in NO_ANALYSIS_TYPES or track(s) == "quick"
+SECURITY_RX = re.compile(r"\b(auth\w*|login|password\w*|passwd|credential\w*|secret\w*|token\w*|api[ -]?keys?|oauth|sso|"
+                         r"session cookies?|encrypt\w*|permission\w*|role-based|rbac|personal data|pii|gdpr|privacy)\b", re.I)
+SECURITY_SECTIONS = ("security", "privacy")
+
+
+BRANCH_ID = re.compile(r"(?:^|/)([A-Za-z]+\d{4})-[\w.-]+$")
+
+
+def story_branches() -> dict[str, list[dict]]:
+    """Story branches, local and remote (`<id-lowercase>-<slug>`): {ID: [{"ref", "author"}]}. A pushed story branch is
+    a claim the whole team sees, without writing to main."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "for-each-ref", "--format=%(refname:short)\t%(authorname)\t%(authoremail)", "refs/heads", "refs/remotes"],
+                           cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    out: dict[str, list[dict]] = {}
+    ids = set(stories())
+    for line in r.stdout.splitlines() if r.returncode == 0 else []:
+        ref, name, email = (line.split("\t") + ["", ""])[:3]
+        if (m := BRANCH_ID.search(ref)) and (i := norm_id(m.group(1))) in ids and not ref.endswith("/HEAD"):
+            short = ref.split("/", 1)[1] if ref.startswith(("origin/", "upstream/")) else ref
+            if not any(b["branch"] == short for b in out.get(i, [])):
+                out.setdefault(i, []).append({"ref": ref, "branch": short, "author": name, "email": email.strip("<>")})
+    return out
+
+
+def claims() -> dict[str, dict]:
+    """Who works on which story: `claimed_by` / `claimed_at` in stories.toml, else the author of its story branch."""
+    out = {}
+    branches = story_branches()
+    for i, s in stories().items():
+        if s.get("claimed_by"):
+            out[i] = {"by": s["claimed_by"], "at": s.get("claimed_at"), "source": "stories.toml", "branches": branches.get(i, [])}
+        elif branches.get(i):
+            b = branches[i][0]
+            out[i] = {"by": b["author"], "at": None, "source": f"branch {b['ref']}", "branches": branches[i]}
+    return out
+
+
+def same_person(a: str | None, b: str | None) -> bool:
+    return bool(a and b) and a.strip().lower() == b.strip().lower()
+
+
+def pending_actions(text: str) -> list[str]:
+    """Open owner actions of a RUN: unticked lines of `## Pending owner actions` (`- [ ] <action> — owner: … — since: …`)."""
+    sec = heading_section(text, r"^##\s+Pending owner actions\b") or ""
+    return [m.strip() for m in re.findall(r"^\s*-\s*\[ \]\s*(\S.*)$", sec, re.M) if not m.strip().startswith("<")]
+
+
+def security_nfrs() -> set[str]:
+    """NFR IDs filed under the Security or Privacy heading of the NFR file (FR-1 = FR-01 normalised to NFR-01)."""
+    p = "reference/product/non-functional-requirements.md"
+    if not exists(p):
+        return set()
+    out, cur = set(), ""
+    for _, level, line in headings(read(p)):
+        if level == 2:
+            cur = line.lstrip("#").strip().lower()
+        elif m := re.search(r"\bNFR-0*(\d+)\b", line):
+            if any(cur.startswith(s) for s in SECURITY_SECTIONS):
+                out.add(f"NFR-{int(m.group(1)):02d}")
+    return out
+
+
+def security_sensitive(i: str) -> str | None:
+    """Why story i needs the security review step, or None. `security = true|false` in stories.toml decides when set;
+    otherwise a cited Security/Privacy NFR or a security keyword in the Spec."""
+    s = stories().get(i, {})
+    if "security" in s:
+        return "stories.toml security = true" if s["security"] is True else None
+    spec = one(f"delivery/20-specs/SPEC-{i}-*.md")
+    text = read(spec) if spec else ""
+    cited = {f"NFR-{int(n):02d}" for n in re.findall(r"\bNFR-0*(\d+)\b", text + " ".join(s.get("nfr", [])))}
+    if hit := sorted(cited & security_nfrs()):
+        return f"cites {', '.join(hit)} (Security/Privacy)"
+    if m := SECURITY_RX.search(text):
+        return f"the Spec mentions '{m.group(0)}'"
+    return None
+
+
+def security_review(text: str) -> str | None:
+    """Outcome of the RUN §8 `### Security review` subsection: ok | changes-requested | None."""
+    sec = heading_section(text, r"^###\s+Security review\b") or ""
+    m = re.search(r"^\s*-\s*Outcome:([^\n]*)$", sec, re.M)
+    codes = [c for c in ("ok", "changes-requested") if m and re.search(rf"`?\b{c}\b`?", m.group(1).lower())]
+    return codes[0] if len(codes) == 1 else None
+
+
 POINTS = {"XS": 1, "S": 1, "M": 2, "L": 3, "XL": 5}  # default story points per size (PLAN.md `points:` overrides)
 
 
@@ -194,8 +284,12 @@ def backlog_errors() -> list[str]:
         for k in STORY_LINKS:
             if k in s and not (isinstance(s[k], str) and s[k]):
                 out.append(f"{who}: `{k}` must be a story ID")
-        if "skip_analysis" in s and not isinstance(s["skip_analysis"], bool):
-            out.append(f"{who}: `skip_analysis` must be true or false")
+        for k in ("claimed_by", "claimed_at", "repo"):
+            if k in s and not (isinstance(s[k], str) and s[k].strip()):
+                out.append(f"{who}: `{k}` must be a non-empty string")
+        for flag in ("skip_analysis", "security"):
+            if flag in s and not isinstance(s[flag], bool):
+                out.append(f"{who}: `{flag}` must be true or false")
     for n, e in enumerate(backlog().get("epic", []), 1):
         if not isinstance(e, dict) or not isinstance(e.get("id"), str):
             out.append(f"[[epic]] #{n} has no id")
@@ -335,11 +429,12 @@ def run_review(text: str) -> dict | None:
 
 
 def strategy_written(text: str) -> bool:
-    """RUN §1 has a plan: a `- Step 1` line under `### Plan` that is not the template placeholder, or `Strategy ready: yes`."""
+    """RUN §1 has a plan: a first step under `### Plan` (`- TSK-<ID>-01: …`, or `- Step 1` before 1.11) that is not the
+    template placeholder, or `Strategy ready: yes`."""
     if re.search(r"^\s*Strategy ready:\s*yes\b", text, re.M | re.I):
         return True
     plan = heading_section(text, r"^###\s+Plan\b") or ""
-    m = re.search(r"^\s*-\s*Step 1\b(.*)$", plan, re.M)
+    m = re.search(r"^\s*-\s*(?:Step 1\b|TSK-[A-Za-z]+\d{4}-\d+\b)(.*)$", plan, re.M)
     return bool(m) and bool(re.sub(r"\([^)]*\)", "", m.group(1)).strip(" :.…"))  # `- Step 1 (TSK-01): …` is still empty
 
 

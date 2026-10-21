@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Analyst mode — Analysis of one or more stories (max 4 related)"
 model: "Claude Sonnet 5.5"
 ---

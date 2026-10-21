@@ -5,6 +5,6 @@ Developer mode — close a reviewed story: RUN Closed, merge its PR only, re-ver
 
 Arguments: <ID>
 
-> Recommended model: **haiku** (tier `fast`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Haiku 5.5** (tier `fast`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/close.md` with {ID} = <the text typed after the command>.

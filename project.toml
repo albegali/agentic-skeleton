@@ -19,7 +19,22 @@ design = ""                  # existing design or prototype: /mockup maps it ins
 [git]
 # Delivery git rules: delivery/guide/git.md
 merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
-trailers = "none"            # attribution lines agents add to commits and PR bodies: none (no co-author / "generated with" lines) | tool (the tool's default)
+trailers = "none"            # attribution in agent commits and PR bodies: none (no co-author / "generated with" lines) | agent (an `Agent: <tool>/<model>` trailer, no co-author) | tool (the tool's default)
+
+[gates]
+# Quality gates run by `make gates ID=<ID>` at /persist; results go into RUN §8 `### Gates` and `make check` refuses to
+# close a RUN with a failing one. test and lint come from [stack]. Empty command = gate not used.
+typecheck = ""
+coverage = ""                # command whose output ends with the total coverage percentage
+coverage_min = 0             # percent; 0 = any value passes
+secrets = true               # tools/secret_scan.py on the story's files
+mutation = ""                # optional, slow
+
+[skeleton]
+# The skeleton version this project's workflow files come from (set by /kickoff, tools/adopt.py and the upgrade).
+# Update with `make sync-skeleton` (tools/sync_skeleton.py): a 3-way merge, nothing written on conflict.
+version = ""
+source = ""                  # skeleton repository (URL or path); default https://github.com/albegali/agentic-skeleton
 
 [portal]
 # Agentic portal, started by `make portal` (tools/portal.py). Uncomment to pin a release:

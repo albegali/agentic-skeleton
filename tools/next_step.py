@@ -5,6 +5,7 @@ Usage:
   python3 tools/next_step.py            # full view + recommended step
   python3 tools/next_step.py PR0101     # state of one story
   python3 tools/next_step.py --json     # machine output (+ stage of every story in delivery)
+  python3 tools/next_step.py --me <git user name>   # team use: skip stories others claimed, list the claimable ones
 
 Phases: inception (project.toml → vision → requirements → mockup → architecture → backlog → PLAN.md; for an existing
 codebase adopted with tools/adopt.py: project.toml → onboard → backlog → PLAN.md), then analysis/delivery per story following the sprints of PLAN.md. Steps are defined in workflow/workflow.toml.
@@ -115,6 +116,8 @@ def stage(i: str) -> tuple[str, str, str]:
         if st == "Stopped" or (st == "Draft" and not approved and wf.run_stopped(t)):
             return ("stopped", f"RUN stopped by you: /run {i} revise: … to resume, or /run {i} cancel: … to drop the story", "human")
         if st == "Persisted":
+            if (why := wf.security_sensitive(i)) and wf.security_review(t) != "ok":
+                return ("security", f"security-sensitive ({why}): security review before the independent review (RUN §8)", "agent")
             return ("review", "RUN persisted: independent review (RUN §11)", "agent")
         if st == "Reviewed":
             rv = wf.run_review(t)
@@ -123,6 +126,8 @@ def stage(i: str) -> tuple[str, str, str]:
             return ("close", f"review #{rv['n']} ok-to-close: close the story and merge its PR", "agent")
         if st == "Tuning":
             rv = wf.run_review(t)
+            if wf.security_review(t) == "changes-requested" and not (rv and rv["outcome"] == "changes-requested"):
+                return ("tuning", f"the security review requested changes (RUN §8): /run {i} tuning: …, then /persist {i}", "human")
             if rv and rv["outcome"] == "changes-requested":
                 return ("tuning", f"review #{rv['n']} requested changes (RUN §11): /run {i} tuning: …, then /persist {i}", "human")
             return ("tuning", "human verification / in-scope tuning, then persistence", "human")
@@ -205,8 +210,18 @@ def deps_done(i: str) -> bool:
     return all(d in st and stage(d)[0] == "done" for d in st[i].get("deps", []))
 
 
-def recommend(plan: list[dict]) -> dict:
+def claimable(plan: list[dict], me: str | None) -> list[str]:
+    """Stories nobody else claimed, not done, dependencies closed, in plan order (hotfixes first)."""
+    st, cl = wf.stories(), wf.claims()
+    order = [i for i, s in st.items() if s.get("type") == "hotfix"] + [i for sp in plan for i in sp["ids"]]
+    return [i for i in dict.fromkeys(order) if i in st and stage(i)[0] != "done" and deps_done(i)
+            and (i not in cl or wf.same_person(cl[i]["by"], me))]
+
+
+def recommend(plan: list[dict], me: str | None = None) -> dict:
     st = wf.stories()
+    cl = wf.claims() if me else {}
+    mine = lambda i: i not in cl or wf.same_person(cl[i]["by"], me)  # noqa: E731 (with --me, others' claims are skipped)
     states = {i: stage(i) for sp in plan for i in sp["ids"] if i in st}
     current = next((sp for sp in plan if sp["ids"] and any(states.get(i, ("done",))[0] != "done" for i in sp["ids"])), None)
     idx = plan.index(current) if current else len(plan)
@@ -225,18 +240,18 @@ def recommend(plan: list[dict]) -> dict:
     if current:
         for stg in ("close", "review", "execute", "run-strategy", "quick", "brief-spec", "spike"):
             for i in current["ids"]:
-                if i in states and states[i][0] == stg and deps_done(i):
+                if i in states and states[i][0] == stg and deps_done(i) and mine(i):
                     return {**base, "step": stg, "ids": [i], "owner": "agent",
                             "why": f"{current['sprint']}: {i} is in '{stg}' ({states[i][1]}); dependencies closed"}
     # 2. analysis: missing Analysis of the current + next sprint (look-ahead)
     pool = (current["ids"] if current else []) + (nxt["ids"] if nxt else [])
-    missing = [i for i in pool if i in states and states[i][0] == "analysis"]
+    missing = [i for i in pool if i in states and states[i][0] == "analysis" and mine(i)]
     if missing:
         return {**base, "step": "analysis", "ids": missing[:4], "owner": "agent",
                 "why": f"Analysis missing for {current['sprint'] if current else ''}{' and ' + nxt['sprint'] if nxt else ''}"
                        + (f" ({len(missing)} total, max 4 per session)" if len(missing) > 4 else "")}
     # 3. Refined Story to complete
-    r = [i for i in pool if i in states and states[i][0] == "refine"]
+    r = [i for i in pool if i in states and states[i][0] == "refine" and mine(i)]
     if r:
         return {**base, "step": "refine", "ids": r[:1], "owner": "agent", "why": f"Refined Story to complete: {', '.join(r)}"}
     # 4. only human gates: the analyst can work ahead on later sprints
@@ -268,6 +283,21 @@ def step_info(step: str) -> dict:
     return wf.workflow().get("steps", {}).get(step, {})
 
 
+DEEP_SIZES = ("L", "XL")
+
+
+def deep(step: str, ids: list[str]) -> bool:
+    """L/XL stories run the step's deep_command (deep tier) when it declares one."""
+    st = wf.stories()
+    return bool(step_info(step).get("deep_command")) and any(st.get(i, {}).get("size") in DEEP_SIZES for i in ids)
+
+
+def commands_for(step: str, ids: list[str]) -> dict[str, str]:
+    """The command per enabled tool: Codex invokes the generated skills as `$name`, the others as `/name`."""
+    cmd = command_for(step, ids)
+    return {t: ("$" + cmd[1:] if t == "codex" and cmd.startswith("/") else cmd) for t in wf.enabled_tools()}
+
+
 def command_for(step: str, ids: list[str]) -> str:
     s = step_info(step)
     if step == "done":
@@ -276,11 +306,15 @@ def command_for(step: str, ids: list[str]) -> str:
         return "human action (see workflow/steps/human-gate.md)"
     if s.get("owner") == "human" or not s.get("command"):
         return "human action (see workflow/steps/%s.md)" % step
-    return f"/{s['command']}" + (" " + " ".join(ids) if ids else "")
+    return f"/{s['deep_command'] if deep(step, ids) else s['command']}" + (" " + " ".join(ids) if ids else "")
 
 
 def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    if "--me" in argv[:-1]:
+        k = argv.index("--me")
+        argv = argv[:k] + argv[k + 2:]
+    args = [a for a in argv if not a.startswith("--")]
     try:
         run(args, "--json" in sys.argv)
     except (OSError, ValueError) as e:  # unreadable or malformed files (tomllib errors are ValueErrors naming the file)
@@ -308,14 +342,21 @@ def run(args: list[str], as_json: bool) -> None:
 
     rec = inception()
     phase = "inception" if rec else "delivery"
+    me = sys.argv[sys.argv.index("--me") + 1] if "--me" in sys.argv[:-1] else None
     if not rec:
-        rec = recommend(wf.sprints())
+        rec = recommend(wf.sprints(), me)
+        if me:
+            rec["me"] = me
+            rec["claimable"] = claimable(wf.sprints(), me)
     rec["phase"] = phase
     rec["weekly_due"] = weekly_due()
+    rec["pending"] = [{"id": os.path.basename(p)[4:].split(".")[0], "action": a} for p in wf.matches("delivery/30-runs/RUN-*.md")
+                      for a in wf.pending_actions(wf.read(p))]
     info = step_info(rec["step"])
-    rec["tier"] = info.get("tier")
-    rec["models"] = {k: wf.model_for(k, info["tier"]) for k in wf.enabled_tools()} if info.get("tier") else {}
+    rec["tier"] = "deep" if deep(rec["step"], rec["ids"]) else info.get("tier")
+    rec["models"] = {k: wf.model_for(k, rec["tier"]) for k in wf.enabled_tools()} if rec["tier"] else {}
     rec["command"] = command_for(rec["step"], rec["ids"])
+    rec["commands"] = commands_for(rec["step"], rec["ids"])
 
     if as_json:
         out = {k: v for k, v in rec.items() if k not in ("states", "current", "next_sprint", "human_gates")}
@@ -323,7 +364,9 @@ def run(args: list[str], as_json: bool) -> None:
         out["next_sprint"] = rec["next_sprint"]["sprint"] if rec.get("next_sprint") else None
         out["human_gates"] = [{"id": i, "stage": s[0], "detail": s[1]} for i, s in rec.get("human_gates", [])]
         if phase == "delivery":  # every story of the backlog, for boards and dashboards
-            out["stories"] = [{"id": i, "stage": g[0], "detail": g[1], "owner": g[2]} for i in wf.stories() for g in [stage(i)]]
+            cl = wf.claims()
+            out["stories"] = [{"id": i, "stage": g[0], "detail": g[1], "owner": g[2], "claimed_by": cl.get(i, {}).get("by")}
+                              for i in wf.stories() for g in [stage(i)]]
         wf.dump_envelope("next", out)
         return
 
@@ -343,14 +386,24 @@ def run(args: list[str], as_json: bool) -> None:
             for i, s in rec["human_gates"]:
                 print(f"  {i}: {s[1]}")
     print(f"\n→ Recommended step: {rec['step']} {' '.join(rec['ids'])}\n  {rec['why']}")
-    print(f"  Run: {rec['command']}" + (" (fresh session)" if info.get("owner") == "agent" else ""))
+    codex = rec["commands"].get("codex")
+    print(f"  Run: {rec['command']}" + (" (fresh session)" if info.get("owner") == "agent" else "")
+          + (f" · Codex: {codex}" if codex and codex != rec["command"] else ""))
     if rec.get("tier"):
         print(f"  Tier: {rec['tier']} → {wf.tier_line(rec['tier'])}")
-        if info.get("deep_when"):
+        if info.get("deep_when") and rec["tier"] != "deep":
             print(f"  Deep tier when: {info['deep_when']}")
+    if rec.get("me"):
+        cl = wf.claims()
+        print(f"  Claimable for {rec['me']}: " + (", ".join(f"{i}{' (yours)' if i in cl else ''}" for i in rec["claimable"]) or "none")
+              + (f" — claim one: make claim ID={rec['claimable'][0]}" if rec["claimable"] else ""))
     if rec.get("optional"):
         print(f"  In parallel (analysis ahead): /analysis {' '.join(rec['optional']['ids'])}")
     print(f"  Step file: workflow/steps/{rec['step']}.md")
+    if rec["pending"]:
+        print("\nPending owner actions (RUN `## Pending owner actions`):")
+        for x in rec["pending"]:
+            print(f"  {x['id']}: {x['action']}")
     if rec["weekly_due"]:
         print("\n(reminder) The weekly journal is older than 7 days: /weekly")
 

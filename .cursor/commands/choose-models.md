@@ -5,10 +5,10 @@ Choose the model per tier for each vendor/tool, then regenerate the adapters
 
 Arguments: [vendor or tool]
 
-> Recommended model: **haiku** (tier `fast`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Haiku 5.5** (tier `fast`, see models.toml). Switch to it before running this command.
 
 Arguments: <the text typed after the command>
 1. Read `models.toml`. Show a compact table tier × enabled tool with the current model, and mark entries flagged "verify".
 2. Ask the user, one question per tool, which model to use per tier (offer the current value as default; propose the vendor's latest small / mid / large model for fast / balanced / deep). If a web search tool is available, verify the current model names first.
-3. Update `models.toml` (keep comments), run `make agents`, then `make check`.
+3. Update `models.toml` (keep comments), run `make agents`. If the balanced model changed, also set `"model"` in `.claude/settings.json` to it (session default for follow-ups), unless the user wants to keep their own. Then `make check`.
 Chat: the final table, nothing else.

@@ -5,7 +5,7 @@ Compute the next workflow step and tell which command, mode and model to use (mi
 
 Arguments: [ID]  (optional: state of one story)
 
-> Recommended model: **haiku** (tier `fast`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Haiku 5.5** (tier `fast`, see models.toml). Switch to it before running this command.
 
 Do not explore the repository: the state is computed by the script.
 

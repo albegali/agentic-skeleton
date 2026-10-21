@@ -160,13 +160,13 @@ The adapters are already generated for all four tools. You can narrow the list d
 | Tool | What to do once | How you run a command |
 |---|---|---|
 | **Claude Code** | Open the folder (`claude` in the terminal or the IDE extension). `.claude/commands/` and `.claude/settings.json` are picked up automatically. | `/next`, `/kickoff …` |
-| **Codex CLI** | `make codex-prompts` links the prompts into `~/.codex/prompts` (Codex reads prompts only from there). `AGENTS.md` is read natively. | `/prompts:next`, `/prompts:kickoff …` |
+| **Codex CLI** | Skills in `.agents/skills/` (shared through the repository); profiles per tier in `.codex/config.toml`. `AGENTS.md` is read natively. | `$next`, `$kickoff …` (`codex -p deep` for the deep tier) |
 | **GitHub Copilot** (VS Code) | Open the folder; prompt files in `.github/prompts/` show up in Copilot Chat in agent mode. If they don't, enable prompt files in the VS Code settings (`chat.promptFiles`). | `/next`, `/kickoff` |
 | **Cursor** | Open the folder; `.cursor/commands/` and `.cursor/rules/workflow.mdc` are picked up. | `/next`, `/kickoff` |
 
 **Models.** Claude Code and Copilot switch model automatically, because each command pins one. Codex and Cursor print `> Recommended model: …` at the top of the command: select that model before you send it (in Codex, `codex -m <model>` or `/model`).
 
-> The OpenAI and Google model names in `models.toml`, and the Copilot labels, are suggestions marked `verify`. Run `/choose-models` (§5.2) before real work.
+> The OpenAI model names in `models.toml`, and the Copilot and Cursor labels, are suggestions marked `verify` (to use Gemini, add a `[vendors.google]` block and point a tool at it). Run `/choose-models` (§5.2) before real work.
 
 **Permissions (Claude Code).** `.claude/settings.json` pre-allows the read-only workflow commands (`make next`, `make check`, `python3 tools/…`, `git diff/log/status`) and denies `git push --force`, `terraform apply` and reading `.env`. Personal additions belong in `.claude/settings.local.json`, which is not generated.
 
@@ -215,7 +215,7 @@ It shows a table of tier × tool, asks which model to use per tier, updates `mod
 |---|---|---|
 | `fast` | `/next`, `/close`, `/weekly`, `/choose-models` | the vendor's small, cheap model |
 | `balanced` | requirements, mockup, backlog, analysis, coding, review | the vendor's mid model, strong at coding |
-| `deep` | `/architecture`, `/onboard`, L/XL stories when you ask | the vendor's largest model |
+| `deep` | `/architecture`, `/onboard`, L/XL stories (`/run-deep`) | the vendor's largest model |
 
 You can also edit `models.toml` by hand and run `make agents`.
 
@@ -334,8 +334,8 @@ You can list story IDs or whole epics (`EP-02`). The order inside a sprint is th
 | Step | Who | Command | Output |
 |---|---|---|---|
 | Analysis | agent (analyst) | `/analysis CP0101 CP0102` (at most 4 related stories) | `analysis/20-analysis/ANALYSIS_*.md`: functional analysis plus workshop questions ranked by impact |
-| Workshop | **you + team** | — | minutes in `project-journal/notes/YYYY-MM-DD-workshop-<topic>.md` |
-| Refined Story | agent (analyst) | `/refine CP0101 CP0102 project-journal/notes/2026-11-05-workshop-auth.md` | `analysis/30-refined/REFINED_*.md`: scope, confirmed AC, decisions, handoff notes, outcome |
+| Workshop | **you + team** | — | minutes in `analysis/workshops/WORKSHOP_<date>_<IDs>.md` (template `analysis/templates/WORKSHOP-template.md`) |
+| Refined Story | agent (analyst) | `/refine CP0101 CP0102 analysis/workshops/WORKSHOP_2026-11-05_CP0101-CP0102.md` | `analysis/30-refined/REFINED_*.md`: scope, confirmed AC, decisions, handoff notes, outcome |
 
 The Analysis chat reply lists only the high-impact questions: that is your workshop agenda. The Refined Story outcome is one of *ready*, *ready with open points* or *not ready*; "not ready" sends the story back to the workshop.
 
@@ -349,7 +349,8 @@ The Analysis chat reply lists only the high-impact questions: that is your works
 | Approval | **you** | `/run CP0101 approve` (same session) | recorded in RUN §2, Spec → In Progress, then execution starts |
 | Execution | agent | (continues) or `/run CP0101` to resume | code and tests step by step, RUN §3-4 updated; RUN → Tuning when every step is done, Blocked on a deviation that needs you (`/run CP0101 approve-deviation 1`) |
 | Tuning | **you** → agent | `/run CP0101 tuning: the export ignores filters` | in-scope fixes, logged in RUN §5 |
-| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; RUN → Persisted, Spec → Done; `make check`; story PR opened, CI result recorded in RUN §8. Nothing merged. |
+| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; `make gates ID=CP0101` writes the quality gates into RUN §8 (`[gates]` in `project.toml`); RUN → Persisted, Spec → Done; `make check`; story PR opened, CI result recorded in RUN §8. Nothing merged. |
+| Security review | agent (security-sensitive stories only) | `/security-review CP0101` | proposed by `make next` when the story cites a Security/Privacy NFR, the Spec mentions auth, tokens, personal data…, or `security = true`; RUN §8 `### Security review`: `ok`, or `changes-requested` → Tuning |
 | Review | agent, fresh eyes | `/review-story CP0101` | RUN §11 entry: `ok-to-close` → RUN Reviewed; `changes-requested` → RUN back to Tuning with `file:line → problem → request` |
 | Closure | agent | `/close CP0101` | RUN → Closed, Brief closed; **only this story's PR** merged after its required checks; `main` re-verified; other branches listed, never touched ([git rules](../delivery/guide/git.md)) |
 
@@ -358,6 +359,7 @@ Rules agents follow, and that you can hold them to:
 - nothing beyond the Spec: out-of-scope work stops or becomes a logged deviation;
 - the RUN is append-only: if it is not in the RUN, it did not happen;
 - a RUN is never Closed before it is Persisted and reviewed (`make check` enforces the RUN §11 record);
+- no secrets in code or artifacts: `make hooks` installs a pre-commit secret scan, CI runs gitleaks and `tools/secret_scan.py`;
 - a story merges only its own PR, after green CI; protect `main` (required checks, optionally one review) as in [git rules](../delivery/guide/git.md#recommended-repository-settings).
 
 ### 6.3 A typical day
@@ -404,7 +406,8 @@ Drop quick notes in `project-journal/notes/current-week.md` during the week: `/w
 | regenerate the backlog views | `make backlog` |
 | change models | `/choose-models` or edit `models.toml` → `make agents` |
 | add a story | add it to `backlog/stories.toml` → `make backlog` → add it to `PLAN.md` |
-| ask for a bigger model on a hard story | `/run CP0207` + "use the deep tier" |
+| run a hard story on a bigger model | `/run-deep CP0207` (`make next` proposes it for L/XL stories) |
+| see sessions, tier share, context peaks, cost | `make usage DAYS=30` |
 | resume a broken session | fresh session → `make next` (the state is in the files) |
 
 ---
@@ -415,7 +418,10 @@ Drop quick notes in `project-journal/notes/current-week.md` during the week: `/w
 - `AGENTS.md` is the only rule set. `CLAUDE.md`, `.github/copilot-instructions.md` and `.cursor/rules/workflow.mdc` just point to it.
 - Commit the generated adapters, so teammates get the commands without running anything.
 - Enable only the tools the team uses (`/kickoff`, or `enabled = false` in `models.toml` → `make agents`). Disabled tools' files are removed.
-- **One story, one owner, one RUN.** Avoid two agents on the same story at the same time. Different stories in parallel are fine if their dependencies are closed.
+- **One story, one owner, one RUN.** Claim a story before `/brief`: `make claim ID=CP0104` creates its branch, records `claimed_by` / `claimed_at` and pushes it, so the team sees the claim. `make next --me "<your git name>"` skips stories others claimed and lists the claimable ones (dependencies closed, plan order). `make check` warns about a story on two branches, a claim older than 14 days without a RUN, and more than one open story per person.
+- **Parallel stories**: `make claim ID=CP0105 WORKTREE=1` checks the branch out in `../<repo>-cp0105`; run one agent session per worktree.
+- **Commit points**: inception and analysis artifacts get their own branch and PR at the end of each step; Brief and Spec are committed on the story branch ([git rules](../delivery/guide/git.md#commit-points)).
+- **Telling agent commits apart**: `[git] trailers = "agent"` adds an `Agent: <tool>/<model>` trailer instead of a co-author line.
 - Human gates are people's decisions: agree on who approves what (usually the PO for inception and Spec, the tech lead for RUN strategies) and record it in `reference/documentation/stakeholders.md`.
 
 ---
@@ -431,7 +437,8 @@ What the skeleton already does for you:
 
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.
-2. If the execution session gets past about half the context, start fresh and run `/run <ID>`: the RUN is the memory.
+2. If a session gets past about 80k tokens (Claude Code: `/context`), `/clear` and resume with the step's command (`/run <ID>` during execution): the RUN is the memory.
+   Every session also carries a fixed baseline before the step reads anything: the tool's system prompt, the tool schemas of each enabled MCP server, and the skill list. It can be tens of thousands of tokens. Disable the MCP servers and plugins this repository does not use (Claude Code: `/mcp`, or `enabledMcpjsonServers` / `disabledMcpjsonServers` in `.claude/settings.json`); `context.py` estimates only what the step adds.
 3. Keep stories small (S/M). Split XL stories in `/backlog`.
 4. Don't paste long logs or whole files into the chat: point to the path.
 5. Batch related stories in `/analysis` (at most 4) and `/refine` (same workshop).
@@ -474,27 +481,35 @@ What you should do:
 | Stack commands | `project.toml` `[stack]` | `make setup / test / lint` |
 | CI | `.github/workflows/workflow-check.yml` or `azure-pipelines-workflow.yml` | add your build and test jobs next to `make check` |
 
-Never edit generated files (`.claude/commands`, `.codex/prompts`, `.github/prompts`, `.cursor/commands`, `CLAUDE.md`, `workflow/STEPS.md`): `make check` flags them as stale and `make agents` overwrites them.
+Never edit generated files (`.claude/commands`, `.agents/skills`, `.codex/prompts`, `.codex/config.toml`, `.github/prompts`, `.github/agents`, `.cursor/commands`, `CLAUDE.md`, `workflow/STEPS.md`): `make check` flags them as stale and `make agents` overwrites them.
 
 ---
 
 ## 12. Pulling skeleton updates into your project
 
-If you used Option B (§3), the skeleton is a remote:
+One mechanism for every project, however it was created (template, clone, `make adopt`):
 
 ```bash
-git fetch skeleton
-git merge skeleton/main
-make agents && make check && make test-tools
+make sync-skeleton ARGS=--dry-run      # the plan: files updated, kept, removed; conflicts
+make sync-skeleton                     # apply it, then review: git diff --stat
+make check && make test-tools
 ```
 
-What to expect in the merge:
+`project.toml [skeleton] version` records the skeleton version your workflow files come from (`source` says where the
+skeleton lives; `SKELETON=<path or URL>` overrides it). For each workflow file the upgrade compares three versions —
+the skeleton's at your version, yours, the skeleton's now — and takes the skeleton's change when you did not touch the
+file, keeps yours when the skeleton did not change it, and **stops before writing anything** when both changed it
+(it prints the upstream diff command for each conflict). Project-owned files are never replaced: `project.toml` and
+`models.toml` only gain the new settings with their defaults; `reference/`, `backlog/`, `PLAN.md`, `analysis/` and
+`delivery/` artifacts and `project-journal/` are not touched. Migrations for the versions crossed run once
+(`tools/migrations/`), adapters are re-rendered, and `[skeleton] version` is updated. What changed and anything you
+must do by hand: [`tools/CHANGELOG.md`](../tools/CHANGELOG.md). `make check` warns when `[skeleton] version` and
+`tools/VERSION` disagree (a partial or manual sync).
 
-| Skeleton-owned (take theirs unless you customized it) | Project-owned (keep yours) |
-|---|---|
-| `tools/`, `workflow/steps/`, `workflow/workflow.toml`, templates, `AGENTS.md`, guides, `Makefile` | `project.toml`, `models.toml`, `reference/`, `backlog/`, `PLAN.md`, `analysis/` and `delivery/` artifacts, `project-journal/` |
-
-Resolve generated files by running `make agents` rather than merging them by hand. With Options A or C, compare the skeleton's `tools/` and `workflow/` against yours and copy over what you want.
+A story whose code belongs to another repository (e.g. a fix for the skeleton found while building your project):
+`repo = "<name>"` on the story; the RUN records the commit or tag there in References `Upstream:`. Actions only a
+person can do (a tag, a release, a setting) go in the RUN's `## Pending owner actions`: `make next` lists the open ones,
+and a RUN cannot close with Goal achieved `Yes` while one is open.
 
 ---
 
@@ -512,7 +527,7 @@ Resolve generated files by running `make agents` rather than merging them by han
 | `make check`: `unknown FR-xx` | a story cites a requirement that doesn't exist (or isn't a `### FR-xx` heading) |
 | `make check`: `dependency cycle` | fix `deps` in `stories.toml` |
 | `make check`: `status … without recorded approval` | a RUN moved past Draft without `- [x] Approved` in §2 |
-| Codex: `/prompts:next` not found | run `make codex-prompts`, then restart Codex |
+| Codex: `$next` not found | restart Codex in the repository root (skills are read from `.agents/skills/`); run `make agents` if the folder is missing |
 | Copilot: wrong or unknown model | the labels in `models.toml` `[tools.copilot] models` must match your Copilot model picker; fix them, then `make agents` |
 | Copilot: prompts not listed | use agent mode in Copilot Chat; enable prompt files in the VS Code settings |
 | `make setup/test/lint`: "not defined yet" | run `/architecture`, or fill `project.toml` `[stack]` |

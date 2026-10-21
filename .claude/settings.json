@@ -18,7 +18,29 @@
       "Bash(git push --force:*)",
       "Bash(terraform apply:*)",
       "Read(./.env)",
-      "Read(./.env.*)"
+      "Read(./.env.*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push origin --delete:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git branch -D:*)",
+      "Bash(make approve:*)",
+      "Bash(python3 tools/approve.py:*)",
+      "Bash(cat .env:*)"
+    ]
+  },
+  "model": "sonnet",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/gate_guard.py\""
+          }
+        ]
+      }
     ]
   }
 }

@@ -6,6 +6,11 @@
 
 <!-- Proposed, accepted, superseded, or rejected. -->
 
+## Owner's words
+
+<!-- For a decision given in chat (AGENTS.md §3): the owner's words verbatim, quoted, with date and who. Never paraphrased.
+     Artifacts changed because of it cite this file in their revision line. It does not flip a gate field. -->
+
 ## Context
 
 <!-- Describe the situation that required a decision. -->

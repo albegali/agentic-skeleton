@@ -5,6 +5,6 @@ Inception — set up the project (name, ID prefix, language, tools) and write vi
 
 Arguments: [project name] [source files: brief, transcript, notes…]
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/kickoff.md`. Arguments: <the text typed after the command>

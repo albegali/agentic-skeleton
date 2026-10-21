@@ -2,13 +2,15 @@
 """Print the exact context budget of a step, so agents read nothing else.
 
 Usage:
-  python3 tools/context.py <step> [ID…]        # files to read, cited FR/NFR/ADR sections, command outputs
+  python3 tools/context.py <step> [ID…] [--with <file>…]   # files to read, cited FR/NFR/ADR sections, command outputs;
+                                               # --with adds files passed to the step (workshop minutes, sources)
   python3 tools/context.py --index <file.md>   # headings only (cheap table of contents)
   python3 tools/context.py --package-rules     # package-level AGENTS.md files
   python3 tools/context.py --repo-map          # map of an existing codebase (tools/repo_map.py)
   add --json to any form for machine output (schema in tools/README.md)
 
-Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run, run_max, sources, design).
+Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, refs_from, deps, run, run_max, sources, design,
+package_rules, diff).
 `sources = true` adds the kickoff sources of project.toml [inception]; `design = true` points to the existing design.
 """
 from __future__ import annotations
@@ -24,12 +26,14 @@ import wf  # noqa: E402
 
 REQ_FILES = {"FR": "reference/product/functional-requirements.md", "NFR": "reference/product/non-functional-requirements.md"}
 REF_RX = re.compile(r"\b(FR|NFR|ADR)-(\d+)\b")
-PATH_RX = re.compile(r"\b(reference/[\w./-]+\.md)\b")
+PATH_RX = re.compile(r"\b(reference/[\w./-]+\.md)(#[^\s)\]>,;]*)?")  # `file.md#FR-27` cites a section, extracted by ID
 ARCH_RX = re.compile(r"\barchitecture(?:\.md)?\s*§\s*(\d+)")
 ARCH = "reference/architecture/architecture.md"
 BIG = 400  # lines: warn the agent to read only what it needs
 ROOT_RULES = {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}
 RUN_TIMEOUT = 60  # seconds per `run` command of a budget
+DIFF_BIG = 8000  # tokens: above this, review the story diff file by file
+BASE = "main"
 section = wf.heading_section
 
 
@@ -74,7 +78,32 @@ def expand(pattern: str, ids: list[str], dep: str | None = None) -> str:
     return pattern.replace("{ID}", ids[0] if ids else "*").replace("{DEP}", dep or "*")
 
 
-def budget_data(step: str, ids: list[str]) -> dict:
+def size(p: str) -> dict:
+    t = wf.read(p)
+    n = t.count("\n") + 1
+    return {"path": wf.rel(p), "lines": n, "tokens": wf.approx_tokens(len(t)), "long": n > BIG}
+
+
+def git(*args: str) -> str | None:
+    try:
+        r = subprocess.run(["git", *args], cwd=wf.ROOT, capture_output=True, text=True, encoding="utf-8", timeout=RUN_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def story_diff() -> dict | None:
+    """Size of the story branch diff against main, so the review can budget it (file by file when large)."""
+    stat = git("diff", "--stat", f"{BASE}...HEAD")
+    if stat is None:
+        return None
+    body = git("diff", f"{BASE}...HEAD") or ""
+    files = [line.split("|")[0].strip() for line in stat.splitlines() if "|" in line]
+    tokens = wf.approx_tokens(len(body))
+    return {"base": BASE, "files": files, "stat": stat.rstrip(), "tokens": tokens, "by_file": tokens > DIFF_BIG}
+
+
+def budget_data(step: str, ids: list[str], extra: list[str] | None = None) -> dict:
     """The context budget as data: files to read in full, cited sections, dependency excerpts, command outputs."""
     cfg = wf.workflow().get("steps", {}).get(step)
     if cfg is None:
@@ -101,13 +130,11 @@ def budget_data(step: str, ids: list[str]) -> dict:
     design = wf.design() if cfg.get("design") else ""
     if design and not wf.exists(design):
         missing.append(design)
+    for p in extra or []:  # files passed to the step: workshop minutes, further sources
+        (full.append(wf.path(p)) if wf.exists(p) else missing.append(p))
     full = list(dict.fromkeys(full))
     missing = list(dict.fromkeys(missing))
-    read = []
-    for p in full:
-        t = wf.read(p)
-        n = t.count("\n") + 1
-        read.append({"path": wf.rel(p), "lines": n, "tokens": wf.approx_tokens(len(t)), "long": n > BIG})
+    read = [size(p) for p in full]
 
     # cited references: only the sections
     refs: list[tuple[str, str]] = []
@@ -118,7 +145,7 @@ def budget_data(step: str, ids: list[str]) -> dict:
             for p in wf.matches(expand(pat, [i])):
                 text = wf.read(p)
                 refs += refs_in(text)
-                paths += PATH_RX.findall(text)
+                paths += [m.group(1) for m in PATH_RX.finditer(text) if not m.group(2)]
                 arch += ARCH_RX.findall(text)
     sections = []
     unique: dict[tuple[str, int], tuple[str, str]] = {}
@@ -127,27 +154,28 @@ def budget_data(step: str, ids: list[str]) -> dict:
     for kind, num in unique.values():
         if kind == "ADR":
             hit = wf.matches(f"reference/architecture/ADR-{int(num):03d}*.md") or wf.matches(f"reference/architecture/ADR-{num}*.md")
-            sections.append({"ref": f"ADR-{num}", "file": wf.rel(hit[0]) if hit else None, "text": None})
+            sections.append({"ref": f"ADR-{num}", "file": wf.rel(hit[0]) if hit else None, "text": None,
+                             "tokens": size(hit[0])["tokens"] if hit else 0})
             continue
         f = REQ_FILES[kind]
         sec = section(wf.read(f), rf"\b{kind}-0*{int(num)}\b") if wf.exists(f) else None
-        sections.append({"ref": f"{kind}-{num}", "file": f, "text": sec})
+        sections.append({"ref": f"{kind}-{num}", "file": f, "text": sec, "tokens": wf.approx_tokens(len(sec or ""))})
     # files and architecture sections cited by path in the Story (e.g. notes)
     arch = list(dict.fromkeys(arch))
     arch_text = wf.read(ARCH) if arch and wf.exists(ARCH) else ""
     for num in arch:
-        sections.append({"ref": f"architecture §{num}", "file": ARCH, "text": section(arch_text, rf"^#+\s+{num}\.") if arch_text else None})
-    in_read = {r["path"] for r in read}
+        sec = section(arch_text, rf"^#+\s+{num}\.") if arch_text else None
+        sections.append({"ref": f"architecture §{num}", "file": ARCH, "text": sec, "tokens": wf.approx_tokens(len(sec or ""))})
+    # a file whose sections were extracted, or an ADR already listed by ID, is not read again in full
+    in_read = {r["path"] for r in read} | {s["file"] for s in sections if s["file"]}
     cited = []
     for p in dict.fromkeys(paths):
-        if p in in_read or (arch and p == ARCH):
+        if p in in_read:
             continue
         if not wf.exists(p):
             cited.append({"path": p, "exists": False, "lines": 0, "tokens": 0, "long": False})
             continue
-        t = wf.read(p)
-        n = t.count("\n") + 1
-        cited.append({"path": p, "exists": True, "lines": n, "tokens": wf.approx_tokens(len(t)), "long": n > BIG})
+        cited.append({**size(wf.path(p)), "exists": True})
 
     # dependency excerpts
     excerpts = []
@@ -172,17 +200,23 @@ def budget_data(step: str, ids: list[str]) -> dict:
             lines = [f"(timed out after {RUN_TIMEOUT}s)"]
         runs.append({"cmd": cmd, "output": "\n".join(lines[:cap]), "truncated": max(0, len(lines) - cap)})
 
-    inline = sum(len(x["text"] or "") for x in sections) + sum(len(x["text"] or "") for x in excerpts) + sum(len(x["output"]) for x in runs)
+    # package AGENTS.md: counted in full (an upper bound: read only those of the packages you touch)
+    rules = [size(wf.path(r)) for r in package_rules()] if cfg.get("package_rules") else []
+    diff = story_diff() if cfg.get("diff") else None
+
+    inline = sum(len(x["text"] or "") for x in excerpts) + sum(len(x["output"]) for x in runs)
     return {"step": step, "tier": cfg.get("tier"), "ids": ids, "needs_ids": needs_id and not ids, "read": read, "missing": missing,
             "design": design or None, "cited": cited, "sections": sections, "dependencies": excerpts, "runs": runs,
-            "tokens": sum(x["tokens"] for x in read + cited) + wf.approx_tokens(inline)}
+            "package_rules": rules, "diff": diff,
+            "tokens": sum(x["tokens"] for x in read + cited + sections + rules) + wf.approx_tokens(inline) + (diff["tokens"] if diff else 0)}
 
 
-def budget(step: str, ids: list[str]) -> str:
-    b = budget_data(step, ids)
+def budget(step: str, ids: list[str], extra: list[str] | None = None) -> str:
+    b = budget_data(step, ids, extra)
     out = [f"# Context budget — step '{step}' · tier {b['tier'] or '—'}" + (f" · IDs {' '.join(ids)}" if ids else "")
            + f" · ≈{b['tokens']:,} tokens",
-           f"Step file: workflow/steps/{step}.md. Read ONLY what follows; for anything else, ask or grep a specific symbol.", ""]
+           f"Step file: workflow/steps/{step}.md. Read ONLY what follows; for anything else, ask or grep a specific symbol.",
+           "(The tool adds a fixed per-session baseline on top: system prompt, MCP servers, skills; see docs/GUIDE.md.)", ""]
     if b["needs_ids"]:
         out += [f"⚠ step '{step}' needs story IDs: python3 tools/context.py {step} <ID…>", ""]
     out.append("## Read in full")
@@ -206,6 +240,13 @@ def budget(step: str, ids: list[str]) -> str:
                 out.append(f"- {s['ref']}: " + (f"read {s['file']}" if s["file"] else "missing"))
             else:
                 out += ["", f"### {s['ref']} ({s['file']})", s["text"] or "(not found)"]
+    if b["package_rules"]:
+        out += ["", "## Package rules (read those of the packages you touch)"] + [f"- {r['path']} ({r['lines']} lines)" for r in b["package_rules"]]
+    if b["diff"]:
+        d = b["diff"]
+        how = (f"≈{d['tokens']:,} tokens: too large to read at once. Review file by file: `git diff {d['base']}...HEAD -- <path>`"
+               if d["by_file"] else f"≈{d['tokens']:,} tokens: `git diff {d['base']}...HEAD`")
+        out += ["", f"## Story diff vs {d['base']} ({len(d['files'])} files) — {how}", d["stat"] or "(empty diff)"]
     for d in b["dependencies"]:
         out += ["", f"### Dependency {d['id']} — {d['file']}" + (f" §{d['from']}+" if d["from"] else ""), d["text"] or "(section not found)"]
     for r in b["runs"]:
@@ -248,11 +289,16 @@ def run() -> None:
         else:
             print(repo_map.repo_map())
     else:
-        ids = [wf.norm_id(x) if re.fullmatch(r"[A-Za-z]+-?\d{4}", x) else x for x in a[1:]]
+        rest, extra = a[1:], []
+        while "--with" in rest:
+            k = rest.index("--with")
+            extra += rest[k + 1:k + 2]
+            rest = rest[:k] + rest[k + 2:]
+        ids = [wf.norm_id(x) if re.fullmatch(r"[A-Za-z]+-?\d{4}", x) else x for x in rest]
         if as_json:
-            wf.dump_json(budget_data(a[0], ids))
+            wf.dump_json(budget_data(a[0], ids, extra))
         else:
-            print(budget(a[0], ids))
+            print(budget(a[0], ids, extra))
 
 
 if __name__ == "__main__":

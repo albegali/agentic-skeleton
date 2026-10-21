@@ -7,6 +7,9 @@
   - Fill only when execution starts after human approval, immediately before the first code or test change.
 - Completed at (datetime):
   - Fill at `/close`, after the review.
+- Branch:            (created at `/brief`: `delivery/guide/git.md`)
+- Upstream:          only for a story with `repo = "<name>"` in stories.toml: the commit or tag in that repository
+- PR:                (`/persist`)
 
 ---
 
@@ -30,9 +33,9 @@ Draft → Strategy Approved → Executing → Tuning → Persisted → Reviewed 
 - [ ] `delivery/templates/RUN-template.md`
 
 ### Plan
-- Step 1: …
-- Step 2: …
-- Step 3: …
+> One step per Spec task, by ID; only the approach, never the task text again.
+- TSK-<ID>-01: …
+- TSK-<ID>-02: …
 
 ### Assumptions
 - …
@@ -101,7 +104,10 @@ If FAIL → move to Tuning.
 
 # 5. Tuning Log (If needed)
 
-> Only within scope.
+> Only within scope. The acceptance is the human's: fill it when they run `/persist` (or say the result is accepted).
+
+Tuning accepted by:
+Date:
 
 ### Entry #1
 - Issue:
@@ -131,7 +137,7 @@ If FAIL → move to Tuning.
 # 7. Persistence / Reconciliation
 
 - [ ] Spec updated (if needed)
-- [ ] Specs updated (if needed)
+- [ ] Reference docs updated (if needed)
 - [ ] Acceptance Criteria aligned
 
 Summary:
@@ -141,12 +147,19 @@ Summary:
 
 # 8. Quality Gates Check
 
-- [ ] Acceptance criteria satisfied
-- [ ] Tests passing
-- [ ] No scope creep
-- [ ] Persistence completed
+Facts, not ticks (`make check` reads them):
 
-CI: green / red / none (no remote) — <PR URL>
+- AC: n/n met (Spec §4; the tests named there)
+- Tests: <command> → pass / fail (counts)
+- Out-of-scope changes: none / <files and why>
+- CI: green / red / none (no remote) — <PR URL>
+
+### Security review
+> Only for security-sensitive stories, written by `/security-review` (`workflow/steps/security.md`); delete otherwise.
+- Date:
+- Reviewer:
+- Outcome: `ok` / `changes-requested`
+- Findings:
 
 ---
 
@@ -187,6 +200,14 @@ Summary:
 - Outcome: `ok-to-close` / `changes-requested`
 - Findings:
   - …
+
+---
+
+## Pending owner actions
+
+> Actions only a person can do that the story still waits for (a tag, a release, a setting, a sign-off), one per line.
+> `make next` lists the open ones of every RUN; a RUN cannot close with Goal achieved `Yes` while one is open.
+- [ ] <action> — owner: <name> — since: <YYYY-MM-DD>
 
 ---
 

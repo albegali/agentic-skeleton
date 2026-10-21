@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — stack proposal, ADRs, architecture, data model, Makefile targets"
 model: "Claude Opus 5.5"
 ---

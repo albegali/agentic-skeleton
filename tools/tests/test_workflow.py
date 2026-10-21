@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -240,6 +241,78 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(r.next("DM0102")["step"], "workshop")
         r.run("tools/check_workflow.py")
 
+    def test_large_stories_route_to_the_deep_command(self):
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "L"', 1))
+        i = "DM0101"
+        r.write(f"analysis/30-refined/REFINED_{i}_walking_skeleton.md", REFINED_MD)
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        n = r.next()
+        self.assertEqual((n["step"], n["command"], n["tier"], n["models"]["claude-code"]), ("run-strategy", f"/run-deep {i}", "deep", "opus"))
+        cmd = r.read(".claude/commands/run-deep.md")
+        self.assertIn("model: opus", cmd)
+        self.assertIn("approve-deviation", cmd)  # same body as /run
+        r.write("backlog/stories.toml", STORIES.format(st="approved"))
+        self.assertEqual((r.next()["command"], r.next()["tier"]), (f"/run {i}", "balanced"))
+
+    def test_session_default_model_is_the_balanced_tier(self):
+        r = self.r
+        self.assertEqual(json.loads(r.read(".claude/settings.json"))["model"], "sonnet")
+        own = {"model": "claude-opus-5-5", "permissions": {"allow": ["Bash(ls)"]}}
+        r.write(".claude/settings.json", json.dumps(own))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(s["model"], "claude-opus-5-5")  # chosen by the project: kept
+        self.assertIn("Bash(make next)", s["permissions"]["allow"])
+        self.assertIn("session default model 'claude-opus-5-5' is not the balanced tier 'sonnet'", r.run("tools/check_workflow.py").stdout)
+        r.write(".claude/settings.json", json.dumps({"permissions": {}}))
+        r.run("tools/render_agents.py")
+        self.assertEqual(json.loads(r.read(".claude/settings.json"))["model"], "sonnet")
+
+    def test_usage_splits_sessions_by_command_and_reports_tier_shares(self):
+        r = self.r
+        home = os.path.join(r.dir, ".home")
+        r.env.update(CLAUDE_CONFIG_DIR=os.path.join(home, "claude"), CODEX_HOME=os.path.join(home, "codex"))
+        slug = "".join(c if c.isalnum() else "-" for c in os.path.abspath(r.dir))
+        msg = lambda i, model, out, ctx=100: {"type": "assistant", "sessionId": "s1", "timestamp": "2026-10-14T09:00:%02dZ" % i, "requestId": f"q{i}",
+                                              "message": {"id": f"m{i}", "model": model, "usage": {"input_tokens": 1, "output_tokens": out,
+                                                          "cache_creation_input_tokens": 10, "cache_read_input_tokens": ctx}}}
+        user = lambda content, i=0, **k: {"type": "user", "sessionId": "s1", "userType": "external", "timestamp": "2026-10-14T09:00:%02dZ" % i,
+                                          "message": {"role": "user", "content": content}, **k}
+        claude = [user("<command-name>/clear</command-name>"), user("<command-name>/weekly</command-name>", 1),
+                  user([{"type": "text", "text": "<!-- step body -->"}], isMeta=True),
+                  msg(2, "claude-opus-5-5", 50), msg(2, "claude-opus-5-5", 50), msg(3, "claude-haiku-5-5", 5),
+                  user([{"type": "tool_result", "content": "The user doesn't want to proceed with this tool use. The tool use was rejected"}]),
+                  user([{"type": "text", "text": "[Request interrupted by user]"}]), user([{"type": "text", "text": "go on"}], 4),
+                  user("<command-name>/run</command-name>", 5), msg(6, "claude-sonnet-5-5", 30, ctx=90_000),
+                  {"type": "cost-state", "sessionId": "s1", "totalCostUSD": 3.0,
+                   "modelUsage": {"claude-opus-5-5": {"costUSD": 2.0}, "claude-sonnet-5-5": {"costUSD": 0.9}, "claude-haiku-5-5": {"costUSD": 0.1}}}]
+        codex = [{"type": "session_meta", "timestamp": "2026-10-15T10:00:00Z", "payload": {"id": "c1", "cwd": r.dir}},
+                 {"type": "turn_context", "payload": {"model": "gpt-5-codex"}},
+                 {"type": "event_msg", "payload": {"type": "user_message", "message": "/prompts:analysis DM0101"}},
+                 {"type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {
+                     "input_tokens": 900, "cached_input_tokens": 600, "output_tokens": 70}, "last_token_usage": {"input_tokens": 900}}}}]
+        other = [{**codex[0], "payload": {"id": "c2", "cwd": "/elsewhere"}}, *codex[1:]]
+        r.write(f".home/claude/projects/{slug}/s1.jsonl", "\n".join(map(json.dumps, claude)) + "\n")
+        r.write(".home/codex/sessions/2026/10/15/rollout-a.jsonl", "\n".join(map(json.dumps, codex)) + "\n")
+        r.write(".home/codex/sessions/2026/10/15/rollout-b.jsonl", "\n".join(map(json.dumps, other)) + "\n")
+        data = json.loads(r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19", "--json").stdout)
+        weekly, run, cx = data["rows"]
+        self.assertEqual((weekly["step"], weekly["tier"], weekly["main"], weekly["main_tier"], weekly["mismatch"]),
+                         ("weekly", "fast", "claude-opus-5-5", "deep", True))  # /clear neither labels nor splits
+        self.assertEqual((weekly["prompts"], weekly["interrupts"], weekly["rejected"]), (2, 1, 1))
+        self.assertEqual(weekly["models"]["claude-opus-5-5"]["output"], 50)  # duplicate message counted once
+        self.assertEqual((run["step"], run["mismatch"], run["over"], run["cost"]), ("run", False, True, None))
+        self.assertEqual((cx["step"], cx["main"], cx["models"]["gpt-5-codex"]["cache_read"], cx["peak"]), ("analysis", "gpt-5-codex", 600, 900))
+        self.assertAlmostEqual(data["models"]["claude-opus-5-5"]["cost_share"], 2.0 / 3.0)
+        self.assertAlmostEqual(data["tiers"]["deep"]["cost_share"], 2.0 / 3.0)
+        out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
+        self.assertIn("2 sessions, 3 commands", out)
+        self.assertIn("deep 25% of calls, 67% of cost", out)
+        self.assertIn("No sessions", r.run("tools/usage.py", "--since", "2026-11-01", "--until", "2026-11-07").stdout)
+
     def test_check_detects_errors(self):
         r = self.r
         r.through_inception()
@@ -262,6 +335,46 @@ class WorkflowTest(unittest.TestCase):
         r.toml_set("project.toml", "git", "trailers", "tool")
         r.toml_set("project.toml", "git", "merge", "rebase")
         r.run("tools/check_workflow.py")
+
+    def test_adapters_follow_each_tools_conventions(self):
+        r = self.r
+        skill = r.read(".agents/skills/brief/SKILL.md")
+        self.assertTrue(skill.startswith("---\nname: brief\ndescription: "))
+        self.assertIn("Use only when the user types $brief.", skill)
+        self.assertIn('[profiles.deep]\nmodel = "gpt-5"', r.read(".codex/config.toml"))
+        prompt = r.read(".github/prompts/run.prompt.md")
+        self.assertIn("agent: 'agent'", prompt)
+        self.assertNotIn("mode:", prompt)
+        self.assertEqual(prompt.count("Arguments"), 1)
+        self.assertIn("model: ", r.read(".github/agents/reviewer.agent.md"))
+        self.assertIn("Claude Sonnet 5.5", r.read(".cursor/commands/brief.md"))
+        n = r.next()
+        self.assertEqual((n["commands"]["claude-code"], n["commands"]["codex"]), ("/kickoff", "$kickoff"))
+        r.write(".codex/config.toml", 'model = "my-own"\n')  # the project's own Codex config is kept
+        r.run("tools/render_agents.py")
+        self.assertEqual(r.read(".codex/config.toml"), 'model = "my-own"\n')
+        r.run("tools/check_workflow.py")
+
+    def test_pending_owner_actions_changelog_and_upstream(self):
+        r, i = self.r, "DM0101"
+        check = lambda: EdgeCaseTest.check(self, False)  # noqa: E731
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nrepo = "skeleton"', 1))
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        run = (RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 9. Outcome\nGoal achieved:\n- [x] Yes\n- [ ] Partial\n" + review
+               + "## Pending owner actions\n- [ ] tag v1.2.0 — owner: PO — since: 2026-10-20\n- [x] release notes — owner: PO — since: 2026-10-20\n")
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        self.assertEqual(r.next()["pending"], [{"id": i, "action": "tag v1.2.0 — owner: PO — since: 2026-10-20"}])
+        errors, warnings = check()
+        self.assertIn(f"RUN-{i}: Closed with Goal achieved `Yes` while owner actions are pending: tag v1.2.0 — owner: PO — since: 2026-10-20 (use Partial, or do them)", errors)
+        self.assertIn(f"RUN-{i}: story in repo 'skeleton': record the upstream commit or tag in RUN References `Upstream:`", warnings)
+        r.write("tools/VERSION", "99.0.0\n")
+        r.toml_set("project.toml", "skeleton", "version", "98.0.0")
+        errors, warnings = check()
+        self.assertIn("tools/CHANGELOG.md has no `## 99.0.0` entry for tools/VERSION", errors)
+        self.assertTrue(any("[skeleton] version 98.0.0 but the workflow files are 99.0.0" in w for w in warnings))
 
     def test_stale_adapter_detected(self):
         with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
@@ -289,6 +402,29 @@ class WorkflowTest(unittest.TestCase):
         self.assertNotIn("Statement", idx)
         warn = r.run("tools/context.py", "analysis").stdout
         self.assertIn("needs story IDs", warn)
+
+    def test_context_counts_what_the_step_really_reads(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md",
+                "---\nstatus: refined\nsource_files:\n  - reference/product/functional-requirements.md#FR-01\n---\n# R\nFR-01, ADR-001\n")
+        b = json.loads(r.run("tools/context.py", "brief-spec", "DM0101", "--json").stdout)
+        self.assertEqual(b["cited"], [])  # the FR file is cited by anchor and its section is already extracted
+        adr = next(s for s in b["sections"] if s["ref"] == "ADR-001")
+        self.assertGreater(adr["tokens"], 0)
+        self.assertGreaterEqual(b["tokens"], sum(x["tokens"] for x in b["read"] + b["sections"]))
+        r.write("pkg/api/AGENTS.md", "# api rules\n" + "rule\n" * 50)
+        r.write("delivery/20-specs/SPEC-DM0101-walking-skeleton.md", SPEC_MD.format(i="DM0101", st="Ready") + "FR-01\n")
+        ex = json.loads(r.run("tools/context.py", "execute", "DM0101", "--json").stdout)
+        self.assertEqual([x["path"] for x in ex["package_rules"]], ["pkg/api/AGENTS.md"])
+        self.assertIn("FR-01", [s["ref"] for s in ex["sections"]])
+        r.write("project-journal/notes/2026-10-01-workshop-x.md", "minutes\n")
+        rf = json.loads(r.run("tools/context.py", "refine", "DM0101", "--with", "project-journal/notes/2026-10-01-workshop-x.md", "--json").stdout)
+        self.assertIn("project-journal/notes/2026-10-01-workshop-x.md", [x["path"] for x in rf["read"]])
+        self.assertEqual(rf["ids"], ["DM0101"])
+        rv = json.loads(r.run("tools/context.py", "review", "DM0101", "--json").stdout)
+        self.assertIn("diff", rv)  # null outside a git repository with a main branch
 
     def test_context_lists_cited_files_and_architecture_sections(self):
         r = self.r
@@ -551,6 +687,9 @@ class EdgeCaseTest(unittest.TestCase):
         for plan, want in (("…", "run-strategy"), ("(TSK-01): …", "run-strategy"), ("(TSK-01): build the API", "run-approval")):
             r.write(run, RUN.format(i=i, st="Draft", plan=plan, ok=" ").replace("- Step 1: (", "- Step 1 ("))
             self.assertEqual(r.next(i)["step"], want, plan)
+        for plan, want in (("- TSK-DM0101-01: …", "run-strategy"), ("- TSK-DM0101-01: build the API", "run-approval")):  # 1.11 template
+            r.write(run, RUN.format(i=i, st="Draft", plan="x", ok=" ").replace("- Step 1: x", plan))
+            self.assertEqual(r.next(i)["step"], want, plan)
         r.write(run, RUN.format(i=i, st="Draft", plan="…", ok=" ") + "\nStrategy ready: yes\n")
         self.assertEqual(r.next(i)["step"], "run-approval")
         r.write(run, RUN.format(i=i, st="Draft", plan="build", ok="X"))
@@ -617,9 +756,39 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertIn("RUN-DM0101: Closed with unchecked quality gates: No scope creep", errors)
         self.assertIn("RUN-DM0101: Closed without Persistence", errors)  # the [x] in §9 does not count for §7
 
+    def test_traceability_facts_and_spec_index(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        spec = ("# SPEC-{i} - Walking skeleton\n## References\n- Brief: BRIEF-{i}\n- Requirements: {req}\n## Status\nDone\n"
+                "# 4. Acceptance Criteria\n- [x] AC1: works → test: tests/test_app.py::test_works\n- [x] AC2: fast\n")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", spec.format(i=i, req="FR-1, NFR-01, FR-28"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        facts = "# 8. Quality Gates Check\n- AC: 2/2 met\n- Tests: {tests}\n- Out-of-scope changes: none\n- CI: {ci}\n"
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "Tuning accepted by:\nDate:\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + facts.format(tests="make test → pass (12)", ci="green — https://x/pr/1") + review)
+        errors, warnings = self.check()
+        self.assertIn(f"SPEC-{i}: Requirements differ from backlog/stories.toml; only in the Spec: FR-28 (align one of them)", warnings)
+        self.assertTrue(any(w.startswith(f"SPEC-{i} Done with AC naming no test") and "AC2" in w for w in warnings), warnings)
+        self.assertIn("delivery/20-specs/README.md out of date: run `make backlog`", warnings)
+        self.assertNotIn(f"RUN-{i}: Persisted", " ".join(warnings))
+        self.assertIn(f"RUN-{i}: Closed without `Tuning accepted by` (§5): record who accepted the result and when", warnings)
+        r.run("tools/gen_backlog.py")
+        self.assertIn(f"| [{i}](SPEC-{i}-walking-skeleton.md) | Walking skeleton | Done | Closed |", r.read("delivery/20-specs/README.md"))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", spec.format(i=i, req="FR-01, NFR-1"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", run.replace("Tuning accepted by:", "Tuning accepted by: PO") + facts.format(tests="make test → fail (1)", ci="green / red / none (no remote) — <PR URL>") + review)
+        errors, warnings = self.check(False)
+        self.assertNotIn("Requirements differ", " ".join(warnings))
+        self.assertIn(f"RUN-{i}: Closed with failing tests in §8: make test → fail (1)", errors)
+        self.assertIn(f"RUN-{i}: Closed without the `CI:` fact in §8", errors)
+        self.assertNotIn("Tuning accepted", " ".join(warnings))
+
     def test_review_then_close(self):
         r = self.r
         r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nsecurity = false', 1))  # no security step
         i = "DM0101"
         r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
         r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
@@ -839,6 +1008,312 @@ LEGACY = {  # a 10-year-old AngularJS frontend, no backend, its own rules and to
     ".claude/settings.json": '{"permissions": {"allow": ["Bash(grunt test)"]}, "model": "opus"}',
     "Makefile": "test:\n\tgrunt test\ncheck:\n\tgrunt jshint\n",
 }
+
+
+class GateTest(unittest.TestCase):
+    """Human gates: the agent hook, `make approve` and the approval-before-code check."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+        self.r.through_inception()
+        self.i = "DM0101"
+        r, i = self.r, self.i
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Draft", plan="build", ok=" ").replace("- [ ] Approved\n", "- [ ] Approved\nReviewer:\nDate:\n"))
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def guard(self, tool: str, inp: dict, prompt: str | None = None) -> subprocess.CompletedProcess:
+        ev = {"tool_name": tool, "tool_input": inp}
+        if prompt is not None:
+            tr = os.path.join(self.r.dir, ".transcript.jsonl")
+            with open(tr, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "user", "userType": "external", "message": {"role": "user", "content": prompt}}) + "\n")
+            ev["transcript_path"] = tr
+        return subprocess.run([sys.executable, "tools/gate_guard.py"], cwd=self.r.dir, env=self.r.env, input=json.dumps(ev),
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_guard_blocks_gate_edits_unless_the_human_typed_the_gate_command(self):
+        r, i = self.r, self.i
+        run = os.path.join(r.dir, f"delivery/30-runs/RUN-{i}.md")
+        tick = {"file_path": run, "old_string": "- [ ] Approved", "new_string": "- [x] Approved"}
+        blocked = self.guard("Edit", tick)
+        self.assertEqual(blocked.returncode, 2)
+        self.assertIn(f"make approve ID={i} GATE=strategy", blocked.stderr)
+        self.assertEqual(self.guard("Edit", tick, "ok, go ahead").returncode, 2)  # free text is not the gate command
+        cmd = "<command-message>run</command-message>\n<command-name>/run</command-name>\n<command-args>{}</command-args>"
+        self.assertEqual(self.guard("Edit", tick, cmd.format(f"{i} approve")).returncode, 0)
+        self.assertEqual(self.guard("Edit", tick, cmd.format("DM0102 approve")).returncode, 2)
+        self.assertEqual(self.guard("Edit", {**tick, "new_string": "- [ ] Approved\n"}).returncode, 0)  # no gate passed
+        spec = os.path.join(r.dir, f"delivery/20-specs/SPEC-{i}-walking-skeleton.md")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        self.assertEqual(self.guard("Write", {"file_path": spec, "content": SPEC_MD.format(i=i, st="Ready")}).returncode, 2)
+        vision = os.path.join(r.dir, "reference/product/vision.md")
+        r.write("reference/product/vision.md", "---\nstatus: draft\n---\n# Vision\n")
+        edit = {"file_path": vision, "old_string": "status: draft", "new_string": "status: approved"}
+        self.assertIn("make approve GATE=inception FILE=reference/product/vision.md", self.guard("Edit", edit).stderr)
+        edit = {"file_path": os.path.join(r.dir, "project.toml"), "old_string": "decided = true", "new_string": "decided = true"}
+        self.assertEqual(self.guard("Edit", edit).returncode, 0)
+
+    def test_guard_keeps_each_mode_in_its_paths_and_blocks_risky_shell(self):
+        r = self.r
+        analysis = "<command-name>/analysis</command-name>\n<command-args>DM0101</command-args>"
+        w = lambda p: {"file_path": os.path.join(r.dir, p), "content": "x\n"}
+        self.assertEqual(self.guard("Write", w("analysis/20-analysis/ANALYSIS_DM0101_x.md"), analysis).returncode, 0)
+        self.assertIn("analyst mode", self.guard("Write", w("delivery/10-briefs/BRIEF-DM0101-x.md"), analysis).stderr)
+        review = "<command-name>/review-story</command-name>\n<command-args>DM0101</command-args>"
+        self.assertEqual(self.guard("Write", w("src/app.py"), review).returncode, 2)
+        self.assertEqual(self.guard("Write", w("src/app.py"), "<command-name>/run</command-name>").returncode, 0)
+        for cmd, code in (("make approve ID=DM0101 GATE=spec", 2), ("git push --force-with-lease", 2), ("gh pr merge 4 --admin --squash", 2),
+                          ("cat .env", 2), ("git push -u origin dm0101-x", 0), ("python3 - <<'EOF'\nprint('make approve')\nEOF", 0)):
+            self.assertEqual(self.guard("Bash", {"command": cmd}).returncode, code, cmd)
+
+    def git(self, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
+
+    def test_make_approve_commits_the_gate_alone_and_ci_checks_the_order(self):
+        r, i = self.r, self.i
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Pat Owner")
+        self.git("config", "user.email", "pat@example.org")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("switch", "-qc", "dm0101-walking-skeleton")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        r.run("tools/approve.py", "--gate", "spec", "--id", i.lower(), "--no-commit")
+        self.assertIn("Ready", r.read(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md"))
+        self.assertIn("already passed", r.run("tools/approve.py", "--gate", "spec", "--id", i, ok=False).stderr)
+        r.write("src/app.py", "print('hi')\n")  # untracked code: not part of the approval commit
+        out = r.run("tools/approve.py", "--gate", "strategy", "--id", i).stdout
+        self.assertIn(f"approve(strategy): {i}", out)
+        body = self.git("log", "-1", "--format=%B")
+        self.assertIn("Approved-by: Pat Owner <pat@example.org>", body)
+        self.assertIn("Approved-at: ", body)
+        self.assertEqual(sorted(self.git("show", "--name-only", "--format=", "HEAD").split()),
+                         [f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", f"delivery/30-runs/RUN-{i}.md"])
+        run = r.read(f"delivery/30-runs/RUN-{i}.md")
+        self.assertIn("- [x] Approved", run)
+        self.assertIn("Reviewer: Pat Owner", run)
+        self.assertIn("Strategy Approved", run)
+        self.git("add", "src/app.py")
+        self.git("commit", "-qm", "code")
+        ok = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
+        self.assertFalse([x for x in ok if "strategy approval" in x["message"]], ok)
+        # code committed together with the approval: an error in CI
+        self.git("reset", "-q", "--hard", "main")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Executing", plan="build", ok="x"))
+        r.write("src/app.py", "print('hi')\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "everything at once")
+        issues = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
+        msgs = " ".join(x["message"] for x in issues)
+        self.assertIn(f"RUN-{i}: code committed with the strategy approval", msgs)
+        self.assertIn("has no `Approved-by:` trailer", msgs)
+
+    def test_hook_is_rendered_once_and_kept_next_to_the_projects_own(self):
+        r = self.r
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertIn("gate_guard.py", json.dumps(s["hooks"]))
+        own = {"type": "command", "command": "echo mine"}
+        s["hooks"]["PreToolUse"].append({"matcher": "Read", "hooks": [own]})
+        r.write(".claude/settings.json", json.dumps(s))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(len(s["hooks"]["PreToolUse"]), 2)
+        self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
+
+
+class SecurityTest(unittest.TestCase):
+    """Secret scan, the security review step and the quality gates."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def test_secret_scan_finds_keys_in_code_and_artifacts(self):
+        r = self.r
+        aws = "AKIA" + "QWERTYUIOPASDFGH"  # built at runtime: the repository itself must scan clean
+        gh = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+        pw = "Zx9!qR7#" + "vL2@pW5k"
+        r.write("src/config.py", f'AWS = "{aws}"\npassword = "{pw}"\nexample_token = "changeme-please"\n')
+        r.write("delivery/30-runs/RUN-DM0101.md", f"# RUN\nused token {gh} to test\nkey {aws}  # secret-scan: ignore\n")
+        out = r.run("tools/secret_scan.py", "--json", "src/config.py", "delivery/30-runs/RUN-DM0101.md", ok=False)
+        self.assertEqual(out.returncode, 1)
+        found = {(f["file"], f["line"], f["rule"]) for f in json.loads(out.stdout)["findings"]}
+        self.assertEqual(found, {("src/config.py", 1, "AWS access key"), ("src/config.py", 2, "hard-coded password"),
+                                 ("delivery/30-runs/RUN-DM0101.md", 2, "GitHub token")})
+        self.assertNotIn(aws, out.stdout)  # values are masked
+        r.run("tools/secret_scan.py", "tools/wf.py")
+
+    def test_security_sensitive_story_gets_a_security_review_before_the_review(self):
+        r, i = self.r, "DM0101"
+        r.through_inception()
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done") + "Users log in with a password.\n")
+        run = RUN.format(i=i, st="Persisted", plan="build", ok="x")
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        n = r.next(i)
+        self.assertEqual((n["step"], n["owner"]), ("security", "agent"))
+        self.assertIn("cites NFR-01 (Security/Privacy)", n["why"])
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('nfr = ["NFR-01"]\n', "", 1))
+        self.assertIn("mentions 'password'", r.next(i)["why"])
+        sec = "### Security review\n- Date: 2026-10-21\n- Reviewer: security review agent\n- Outcome: `{}`\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + sec.format("ok"))
+        self.assertEqual(r.next(i)["step"], "review")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Tuning", plan="build", ok="x") + sec.format("changes-requested"))
+        self.assertIn("security review requested changes", r.next(i)["why"])
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nsecurity = false', 1))
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        self.assertEqual(r.next(i)["step"], "review")  # opted out
+        self.assertIn("security-review", r.read(".claude/commands/security-review.md") + "security-review")
+
+    def test_make_gates_writes_facts_and_blocks_closing_on_a_failure(self):
+        r, i = self.r, "DM0101"
+        r.through_inception()
+        r.write("t_ok.py", "print('12 passed')\n")  # scripts, not `python -c "…%…"`: cmd.exe expands % and quotes differently
+        r.write("t_cov.py", "print('TOTAL 71' + chr(37))\n")
+        r.toml_set("project.toml", "stack", "test", f'"{sys.executable}" t_ok.py')
+        r.toml_set("project.toml", "gates", "coverage", f'"{sys.executable}" t_cov.py')
+        r.toml_set("project.toml", "gates", "coverage_min", 80)
+        r.toml_set("project.toml", "gates", "secrets", False)
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 8. Quality Gates Check\n- Tests: x\n- CI: green — https://x/pr/1\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + review)
+        out = r.run("tools/quality_gates.py", i, ok=False)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        t = r.read(f"delivery/30-runs/RUN-{i}.md")
+        self.assertIn("- coverage: ", t, out.stdout + out.stderr)
+        self.assertIn("→ fail (71% (min 80%))", t)
+        self.assertIn("→ pass (12 passed)", t)
+        self.assertIn(f'- Tests: "{sys.executable}" t_ok.py → pass', t)
+        self.assertIn(f"RUN-{i}: Closed with failing gates (§8 Gates): coverage", r.run("tools/check_workflow.py", ok=False).stdout)
+        r.toml_set("project.toml", "gates", "coverage_min", 70)
+        r.run("tools/quality_gates.py", i)
+        self.assertEqual(r.read(f"delivery/30-runs/RUN-{i}.md").count("### Gates"), 1)
+        self.assertNotIn("failing gates", r.run("tools/check_workflow.py").stdout)
+
+
+class TeamTest(unittest.TestCase):
+    """Team use: claims, the per-person next step, worktrees."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('deps = ["DM0101"]', "deps = []"))
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md", REFINED_MD)
+        r.write("analysis/30-refined/REFINED_DM0102_export.md", REFINED_MD)
+        for a in (("init", "-q", "-b", "main"), ("config", "user.name", "Ada"), ("config", "user.email", "ada@example.org"),
+                  ("add", "-A"), ("commit", "-qm", "base")):
+            self.git(*a)
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def git(self, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
+
+    def test_claim_creates_the_branch_and_others_skip_the_story(self):
+        r = self.r
+        out = r.run("tools/claim.py", "dm0101").stdout
+        self.assertIn("DM0101 claimed by Ada on branch dm0101-walking-skeleton", out)
+        self.assertEqual(self.git("branch", "--show-current").strip(), "dm0101-walking-skeleton")
+        self.assertIn('id = "DM0101"\nclaimed_by = "Ada"\nclaimed_at = "', r.read("backlog/stories.toml"))
+        self.assertEqual(self.git("log", "-1", "--format=%s").strip(), "claim(DM0101): Ada")
+        r.run("tools/check_workflow.py")
+        n = r.next("--me", "Bob")
+        self.assertEqual((n["step"], n["ids"], n["claimable"]), ("brief-spec", ["DM0102"], ["DM0102"]))
+        self.assertEqual(r.next("--me", "ada")["ids"], ["DM0101"])  # names compare case-insensitively
+        self.assertIn("is claimed by Ada", r.run("tools/claim.py", "DM0101", "--me", "Bob", ok=False).stderr)
+        self.git("switch", "-q", "main")
+        self.git("branch", "dm0101-other-try")
+        r.write("backlog/stories.toml", r.read("backlog/stories.toml").replace('id = "DM0101"\n', 'id = "DM0101"\nclaimed_by = "Ada"\n', 1))
+        warnings = json.loads(r.run("tools/check_workflow.py", "--json").stdout)["data"]["issues"]
+        self.assertIn("DM0101: claimed twice, on branches dm0101-other-try, dm0101-walking-skeleton (Ada)", [w["message"] for w in warnings])
+
+    def test_worktree_claim_leaves_the_current_checkout_alone(self):
+        r = self.r
+        out = r.run("tools/claim.py", "DM0102", "--worktree").stdout
+        wt = os.path.join(os.path.dirname(r.dir), os.path.basename(r.dir) + "-dm0102")
+        self.addCleanup(shutil.rmtree, wt, True)
+        self.assertIn(f"in worktree {wt}", out)
+        self.assertEqual(self.git("branch", "--show-current").strip(), "main")
+        with open(os.path.join(wt, "backlog/stories.toml"), encoding="utf-8") as f:
+            self.assertIn('claimed_by = "Ada"', f.read())
+        self.assertEqual(r.next("--me", "Bob")["claimable"], ["DM0101"])
+
+
+class UpgradeTest(unittest.TestCase):
+    """make sync-skeleton / adopt.py --upgrade: a 3-way merge against the version the project records."""
+
+    def setUp(self) -> None:
+        self.skel = Repo()  # the skeleton at 9.0.0, then 9.1.0
+        self.addCleanup(self.skel.cleanup)
+        s = self.skel
+        s.write("tools/VERSION", "9.0.0\n")
+        s.write("tools/CHANGELOG.md", "# Skeleton changelog\n\n## 9.0.0\n- base\n")
+        for a in (("init", "-q", "-b", "main"), ("config", "user.name", "S"), ("config", "user.email", "s@example.org"),
+                  ("add", "-A"), ("commit", "-qm", "9.0.0")):
+            self.git(s.dir, *a)
+        self.proj = tempfile.mkdtemp(prefix="wf-proj-")  # a project cloned at 9.0.0, then changed locally
+        self.addCleanup(shutil.rmtree, self.proj, True)
+        shutil.copytree(s.dir, self.proj, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+        self.edit(self.proj, "workflow/steps/weekly.md", "\nLocal note.\n")
+        # upstream changes for 9.1.0
+        self.edit(s.dir, "workflow/steps/close.md", "\nUpstream change.\n")
+        s.write("tools/VERSION", "9.1.0\n")
+        s.write("tools/CHANGELOG.md", "# Skeleton changelog\n\n## 9.1.0\n- next\n\n## 9.0.0\n- base\n")
+        s.write("project.toml", s.read("project.toml") + "\n[newsec]\nflag = true\n")
+        s.write("tools/migrations/9.0.0-9.1.0.py", "print('migrated')\n")
+        os.remove(os.path.join(s.dir, "workflow/steps/spike-review.md"))
+        for a in (("add", "-A"), ("commit", "-qm", "9.1.0")):
+            self.git(s.dir, *a)
+
+    @staticmethod
+    def git(cwd: str, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, check=True).stdout
+
+    @staticmethod
+    def edit(root: str, p: str, add: str) -> None:
+        with open(os.path.join(root, p), "a", encoding="utf-8") as f:
+            f.write(add)
+
+    def upgrade(self, ok: bool = True, *a: str) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k != "WF_ROOT"}
+        r = subprocess.run([sys.executable, os.path.join(self.skel.dir, "tools/adopt.py"), self.proj, "--upgrade", *a],
+                           capture_output=True, text=True, encoding="utf-8", env=env)  # the tools print UTF-8 on every console
+        self.assertEqual(r.returncode == 0, ok, r.stdout + r.stderr)
+        return r
+
+    def read(self, p: str) -> str:
+        with open(os.path.join(self.proj, p), encoding="utf-8") as f:
+            return f.read()
+
+    def test_upgrade_takes_upstream_keeps_local_changes_and_records_the_version(self):
+        out = self.upgrade(True, "--dry-run").stdout
+        self.assertIn("skeleton 9.0.0 → 9.1.0", out)
+        self.assertNotIn("Upstream change.", self.read("workflow/steps/close.md"))
+        out = self.upgrade().stdout
+        self.assertIn("Upstream change.", self.read("workflow/steps/close.md"))
+        self.assertIn("Local note.", self.read("workflow/steps/weekly.md"))
+        self.assertFalse(os.path.exists(os.path.join(self.proj, "workflow/steps/spike-review.md")))
+        self.assertIn("migration 9.0.0-9.1.0.py: migrated", out)
+        p = tomllib.loads(self.read("project.toml"))
+        self.assertEqual((p["skeleton"]["version"], p["newsec"]["flag"]), ("9.1.0", True))
+        self.assertEqual(self.read("tools/VERSION").strip(), "9.1.0")
+
+    def test_a_conflict_writes_nothing(self):
+        self.edit(self.proj, "workflow/steps/close.md", "\nLocal change too.\n")
+        out = self.upgrade(False).stdout
+        self.assertIn("Conflicts — nothing written", out)
+        self.assertIn("workflow/steps/close.md", out)
+        self.assertEqual(self.read("tools/VERSION").strip(), "9.0.0")
 
 
 class LaunchTest(unittest.TestCase):

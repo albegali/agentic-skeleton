@@ -22,7 +22,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
             existing codebase: tools/adopt.py → onboard → backlog → release plan
 ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for bug, hotfix, chore, refactor, spike, XS, or skip_analysis = true)
-DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist (PR, CI) → review → close (merge)
+DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist (gates, PR, CI) → [security review] → review → close (merge)
             quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy → one approval → same as above; hotfixes first
             spike: findings note (human: Accepted) → follow-up stories; no code merged
 ```
@@ -34,9 +34,9 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 
 - Analyst mode never creates Brief, Spec, RUN or code. Developer mode never requires a Refined Story to start; Brief is always developer-owned.
 - No code without a RUN whose Execution Strategy is approved by a human (RUN §2). Never expand scope beyond the Spec.
-- Agents never pass a human gate on their own: approvals of inception artifacts, workshop, Spec `Ready`, RUN strategy, tuning acceptance.
-- Owner decisions recorded in workshop minutes or given in chat **are** human approvals: apply their consequences without asking again. An artifact already `approved`/`accepted` keeps its status when the change applied is one the owner decided; add a revision line citing the source. Only changes the owner has not decided go back to `draft`/`proposed`.
-- End every step with the next command and each pending human gate as `file → field → value`: the human never has to ask what comes next or how to approve.
+- Agents never pass a human gate on their own: approvals of inception artifacts, workshop, Spec `Ready`, RUN strategy, tuning acceptance. A gate field flips only through `make approve …` (run by the human; a dedicated commit with `Approved-by`/`Approved-at`) or the explicit gate command the human types (`/run <ID> approve`, `/run <ID> approve-deviation <n>`, `/persist <ID>`). In Claude Code a hook (`tools/gate_guard.py`) blocks any other edit that passes a gate, writes outside the current mode, or runs risky git commands; `make check --git` in CI checks that the strategy approval was committed before the code.
+- Owner decisions recorded in workshop minutes or given in chat **are** human approvals: apply their consequences without asking again. A decision given in chat is first written down verbatim (quote, date, who) in `project-journal/decisions/<YYYY-MM-DD>-<topic>.md`; the revision line cites that file. It never flips a gate field by itself (see above). An artifact already `approved`/`accepted` keeps its status when the change applied is one the owner decided; add a revision line citing the source. Only changes the owner has not decided go back to `draft`/`proposed`.
+- End every step with the next command (written `/name`; in Codex the same skill is `$name`) and each pending human gate as `file → field → value` plus its `make approve …` command: the human never has to ask what comes next or how to approve.
 - Templates in `inception/templates/`, `analysis/templates/`, `delivery/templates/` are authoritative: use them as they are.
 - No secrets or personal data in logs, artifacts or prompts.
 - Git: `delivery/guide/git.md` (single source). In short: one branch and one PR per story; `/persist` pushes and waits for CI, `/close` merges **only that story's PR** after the review; other branches are reported, never merged or deleted.
@@ -52,7 +52,7 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 1. **Fresh session per step**, except the RUN chain of one story (strategy → approval → execution → tuning → persistence).
 2. **The context budget is binding**: read only what `tools/context.py` prints. In long documents use the extracted sections, never the whole file.
 3. **Scripts before the LLM**: state, naming, consistency and backlog views come from `make next`, `make check`, `make backlog`.
-4. **Right tier** (single source; other files link here): `fast` for state, journal and closure, `balanced` for everything else, `deep` only for `/architecture`, `/onboard`, L/XL stories, or when the user asks. Mapping per vendor in `models.toml`.
+4. **Right tier** (single source; other files link here): `fast` for state, journal and closure, `balanced` for everything else, `deep` only for `/architecture`, `/onboard`, L/XL stories (`/run-deep`, routed by `make next`), or when the user asks. Mapping per vendor in `models.toml`.
 5. **No subagents by default**: only for genuinely independent workstreams.
 6. **Short output**: artifacts follow templates without restating sources; chat gets a few lines, the content is in the files.
 7. **Do not re-read** what you just wrote; read guides and templates once per session.

@@ -1,0 +1,62 @@
+# Skeleton changelog
+
+One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
+project must do beyond `make sync-skeleton`.
+
+## 1.16.0
+- Upgrade path: `make sync-skeleton` (3-way merge per file, nothing written on conflict, migrations, new settings added); `project.toml [skeleton] version/source`; this changelog.
+- Cross-repo stories: `repo = "<name>"` on a story, RUN References `Upstream:`; pending owner actions in RUN `## Pending owner actions`, shown by `make next`.
+- **Upgrade**: projects without `[skeleton] version` get it from their `tools/VERSION` on the first sync.
+
+## 1.15.0
+- Team use: `make claim`, `make next --me`, worktrees, claim checks; story branch created at `/brief`; commit points per phase; `[git] trailers = "agent"`.
+
+## 1.14.0
+- `tools/secret_scan.py`, `make secrets`, `make hooks`, gitleaks in CI; `/security-review` step for security-sensitive stories; `[gates]` + `make gates`.
+
+## 1.13.0
+- Codex skills in `.agents/skills/`, profiles in `.codex/config.toml`; Copilot `agent:` key and `.github/agents/`; next command per tool.
+- **Upgrade**: remove the old links in `~/.codex/prompts` if you ran `make codex-prompts`.
+
+## 1.12.0
+- Human gates enforced: `make approve`, the `gate_guard.py` hook, approval-before-code in `check --git`.
+
+## 1.11.0
+- Traceable templates (Spec `Requirements:`, AC `→ test:`, RUN Branch/PR, tuning acceptance, facts in RUN §8), workshop template, generated Spec index.
+- **Upgrade**: RUNs and Specs already written keep their format; new ones use the new templates.
+
+## 1.10.0
+- Session default model, `/run-deep` for L/XL stories, `tools/usage.py`.
+
+## 1.9.0
+- Context budgets count ADRs, package rules, minutes and the review diff.
+
+## 1.8.0
+- One source per rule; analyst write exceptions; `[git] trailers`.
+
+## 1.7.0
+- Separate `/close` step after the review; only the story's PR is merged.
+
+## 1.6.0
+- Bug, hotfix, chore, refactor and spike flows; quick track with one approval.
+
+## 1.5.0
+- RUN/Spec state machine: stopped, blocked, cancelled, scope change, split, skip analysis.
+
+## 1.4.0
+- Shared status vocabulary; unknown statuses block.
+
+## 1.3.1
+- Tooling fixes from edge-case probing.
+
+## 1.3.0
+- `--json` envelope for the read tools.
+
+## 1.2.0
+- Git sync at the end of `/persist`.
+
+## 1.1.1
+- `.portal/` ignored; launcher CI on macOS and Windows.
+
+## 1.1.0
+- Portal launcher (`make portal`).

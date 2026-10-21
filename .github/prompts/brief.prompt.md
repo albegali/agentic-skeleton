@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — Brief + Spec of one story, then stop for human review"
 model: "Claude Sonnet 5.5"
 ---
