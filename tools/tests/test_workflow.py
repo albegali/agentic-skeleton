@@ -1152,8 +1152,10 @@ class SecurityTest(unittest.TestCase):
     def test_make_gates_writes_facts_and_blocks_closing_on_a_failure(self):
         r, i = self.r, "DM0101"
         r.through_inception()
-        r.toml_set("project.toml", "stack", "test", f"{sys.executable} -c \"print('12 passed')\"")
-        r.toml_set("project.toml", "gates", "coverage", f"{sys.executable} -c \"print('TOTAL 71%')\"")
+        r.write("t_ok.py", "print('12 passed')\n")  # scripts, not `python -c "…%…"`: cmd.exe expands % and quotes differently
+        r.write("t_cov.py", "print('TOTAL 71' + chr(37))\n")
+        r.toml_set("project.toml", "stack", "test", f'"{sys.executable}" t_ok.py')
+        r.toml_set("project.toml", "gates", "coverage", f'"{sys.executable}" t_cov.py')
         r.toml_set("project.toml", "gates", "coverage_min", 80)
         r.toml_set("project.toml", "gates", "secrets", False)
         r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
@@ -1162,12 +1164,12 @@ class SecurityTest(unittest.TestCase):
         run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 8. Quality Gates Check\n- Tests: x\n- CI: green — https://x/pr/1\n"
         r.write(f"delivery/30-runs/RUN-{i}.md", run + review)
         out = r.run("tools/quality_gates.py", i, ok=False)
-        self.assertEqual(out.returncode, 1)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
         t = r.read(f"delivery/30-runs/RUN-{i}.md")
-        self.assertIn("- coverage: ", t)
+        self.assertIn("- coverage: ", t, out.stdout + out.stderr)
         self.assertIn("→ fail (71% (min 80%))", t)
         self.assertIn("→ pass (12 passed)", t)
-        self.assertIn("- Tests: " + sys.executable, t)
+        self.assertIn(f'- Tests: "{sys.executable}" t_ok.py → pass', t)
         self.assertIn(f"RUN-{i}: Closed with failing gates (§8 Gates): coverage", r.run("tools/check_workflow.py", ok=False).stdout)
         r.toml_set("project.toml", "gates", "coverage_min", 70)
         r.run("tools/quality_gates.py", i)
