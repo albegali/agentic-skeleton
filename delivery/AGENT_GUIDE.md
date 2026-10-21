@@ -6,10 +6,10 @@ Agent-supervised coding, RUN-centric. Three artifacts, three questions:
 |---|---|---|---|
 | **Brief** | `delivery/10-briefs/BRIEF-<ID>-<slug>.md` | *why* — frozen snapshot of the request | Captured → Refined into Spec / Superseded |
 | **Spec** | `delivery/20-specs/SPEC-<ID>-<slug>.md` | *what is allowed* — the contract | Draft → Ready → In Progress → Done · Blocked / Cancelled |
-| **RUN** | `delivery/30-runs/RUN-<ID>.md` | *what happened* — execution trace | Draft → Strategy Approved → Executing → Tuning → Persisted → Closed · Stopped / Blocked / Cancelled |
+| **RUN** | `delivery/30-runs/RUN-<ID>.md` | *what happened* — execution trace | Draft → Strategy Approved → Executing → Tuning → Persisted → Reviewed → Closed · Stopped / Blocked / Cancelled |
 
 Tasks: `TSK-<ID>-NN`. IDs are stable for the life of the work item. Templates in `delivery/templates/` are authoritative.
-Sections loaded only when needed: `delivery/guide/run.md` (RUN rules), `delivery/guide/quick.md` (bug, hotfix, chore, XS), `delivery/guide/refactor-nfr.md`.
+Sections loaded only when needed: `delivery/guide/run.md` (RUN rules), `delivery/guide/quick.md` (bug, hotfix, chore, XS), `delivery/guide/git.md` (branches, PR, merge), `delivery/guide/refactor-nfr.md`.
 
 Tracks by story `type` (`backlog/stories.toml`): **standard** (feature, technical, refactor) Brief → Spec (Ready) → RUN strategy (approve); **quick** (bug, hotfix, chore, or size XS) Brief + Spec + RUN strategy in one session, one approval (`/quick`); **spike** a findings note in `delivery/40-spikes/` (`/spike`), no Brief/Spec/RUN, no code merged. Hotfixes run ahead of the plan. Work types other than feature/technical skip the Analysis.
 
@@ -37,9 +37,9 @@ Upstream (`analysis/`, Refined Story) feeds Brief and Spec. Once Brief, Spec and
 4. **Approval** (human): approve (Spec → In Progress), revise or stop.
 5. **Execute** (agent): RUN → Executing; implement, test, update reference docs if needed; log in RUN §3-4; when every plan step is done → Tuning. A stop condition or a deviation needing approval → RUN §6 entry, Blocked.
 6. **Verify & tune** (human + agent): bug fixes, test improvements, small refactors, minimal changes needed to meet AC. No new features.
-7. **Persistence** (agent): update Spec §11 and the reference docs to the final accepted state (Spec → Done); do not copy execution history into the Spec.
-8. **Close RUN**: quality gates met, persistence done, deviations documented; then close the Brief (Closed at, Derived Artifacts).
-9. **Sync git** (agent): commit and push the story branch, wait for green CI, merge every open branch into `main`, delete them (local and remote), push `main` (`AGENTS.md` §3).
+7. **Persistence** (agent, `/persist`): update Spec §11 and the reference docs to the final accepted state (Spec → Done; do not copy execution history into the Spec); RUN §7-10, RUN → Persisted; push the story branch, open its PR, wait for CI and record it in RUN §8 (`delivery/guide/git.md`).
+8. **Review** (review agent, fresh session, `/review-story`): RUN §11 entry; `ok-to-close` → RUN Reviewed; `changes-requested` → RUN Tuning, back to step 6.
+9. **Close** (agent, `/close`): RUN → Closed, Brief closed (Closed at, Derived Artifacts); merge only this story's PR and re-verify `main` (`delivery/guide/git.md`).
 
 ## 5a. Changes of course
 - **Scope change mid-RUN**: `/spec` → Spec Draft, RUN Blocked with a §6 deviation; the human sets the Spec Ready and approves the deviation.
@@ -57,7 +57,7 @@ Tests updated · build passes · public interfaces valid (API, UI, CLI, formats,
 ## 8. Roles (modes of the same or different agents)
 - **Spec agent** — Brief → Spec: clarifies ambiguity, scope, AC, tasks, gates, stop conditions. No code.
 - **Execution agent** — runs an approved Spec through a RUN, within scope, through persistence.
-- **Reviewer agent** — checks Brief/Spec/RUN alignment, scope creep, quality gates, persistence, open risks. Used before closing a RUN, in a fresh session. For small items one agent may play several roles, but the RUN states which.
+- **Reviewer agent** — checks Brief/Spec/RUN alignment, scope creep, quality gates, persistence, open risks. Runs on every Persisted RUN, in a fresh session, and records its outcome in RUN §11 (the only thing it writes). For small items one agent may play several roles, but the RUN states which.
 
 ## 9. Stop conditions
 Ambiguity · breaking change · security uncertainty · architectural conflict (vs. ADRs) · out-of-scope work.

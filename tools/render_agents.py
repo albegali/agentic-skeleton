@@ -160,7 +160,7 @@ def render() -> dict[str, str]:
         rows.append(f"| [`{sid}`](steps/{sid}.md) | {s.get('owner', '')} | {s.get('mode', '')} | {('/' + s['command']) if s.get('command') else '—'} | "
                     f"{tier or '—'} | " + " | ".join(wf.model_for(t, tier) if tier else "—" for t in tools) + f" | {s.get('session', '—')} |")
     out["workflow/STEPS.md"] = (f"<!-- {HDR} -->\n# Workflow steps\n\nOrder: inception (kickoff → requirements → mockup → architecture → backlog → plan; "
-                                "existing codebase: tools/adopt.py → onboard → backlog → plan), then per story analysis → workshop → refine → brief-spec → spec-approval → run-strategy → run-approval → execute → tuning → review.\n\n"
+                                "existing codebase: tools/adopt.py → onboard → backlog → plan), then per story analysis → workshop → refine → brief-spec → spec-approval → run-strategy → run-approval → execute → tuning → review → close.\n\n"
                                 + "\n".join(rows) + "\n\nCommands: " + ", ".join(f"`/{c}`" for c in cmds) + ".\n")
     return {p: merge(p, t, blocks.get(p)) for p, t in out.items()}
 

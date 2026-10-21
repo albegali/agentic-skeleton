@@ -8,9 +8,9 @@ Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist
            planned after its dependant, sprint capacity (frontmatter `capacity:`), Must stories planned after their release
            target, sprints past their end date with open stories.
 Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN/spike note; Spec ↔ Brief; RUN ↔ Spec; status values; approval
-           before execution; Persistence (§7) before Closed; Blocked RUN without an open §6 deviation; RUN still open on a
-           cancelled story; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template placeholders left
-           in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
+           before execution; Persistence (§7) before Closed; a §11 `ok-to-close` review before Reviewed/Closed; Blocked
+           RUN without an open §6 deviation; RUN still open on a cancelled story; Spec Done / RUN Closed with an unchecked
+           acceptance criterion or gate; template placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
            (same exit code: a workflow with errors is still a successful check, reported in data).
@@ -304,6 +304,12 @@ def check_chain() -> None:
             W.append(f"RUN-{i}: Blocked without a §6 deviation awaiting approval (`Scope impact: Requires approval`)")
         if s not in ("Closed", "Cancelled") and (gone := stories.get(i, {}).get("status")) in ("cancelled", "superseded"):
             W.append(f"RUN-{i}: story {gone} but RUN {s or 'Draft'}: set the RUN to Cancelled")
+        if s in ("Reviewed", "Closed"):
+            rv = wf.run_review(t)
+            if s == "Closed" and wf.heading_section(t, r"^#\s+11\.") is None:
+                W.append(f"RUN-{i}: Closed without a §11 Review (RUN from a skeleton before 1.7.0: add one, or ignore)")
+            elif not rv or not rv["date"] or rv["outcome"] != "ok-to-close":
+                E.append(f"RUN-{i}: {s} without a review record (§11 latest `### Review #n` with Date and Outcome `ok-to-close`)")
         if s == "Closed" and not re.search(r"^\s*-\s*\[[xX]\]", wf.heading_section(t, r"^#\s+7\.") or "", re.M):
             E.append(f"RUN-{i}: Closed without Persistence")
         if s == "Closed" and (left := unchecked(t, r"^#\s+8\.")):

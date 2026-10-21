@@ -21,7 +21,7 @@ Full step table (generated): [`STEPS.md`](STEPS.md). Step procedures: [`steps/`]
 | Inception | `/kickoff` → `/requirements` → `/mockup` (optional) → `/architecture` → `/backlog` → `/release-plan` | approve each artifact (`status: approved`) |
 | Inception, existing codebase | `make adopt TARGET=…` (from the skeleton) → `/onboard` → `/backlog` → `/release-plan` | approve the onboarding artifacts, then backlog and plan |
 | Analysis | `/analysis` → workshop → `/refine` | workshop + minutes |
-| Delivery | `/brief` → Spec review → `/run` (strategy) → `/run <ID> approve` → execution → `/run <ID> tuning: …` → `/persist` → `/review-story` | Spec `Ready`, strategy approval, tuning acceptance |
+| Delivery | `/brief` → Spec review → `/run` (strategy) → `/run <ID> approve` → execution → `/run <ID> tuning: …` → `/persist` → `/review-story` → `/close` | Spec `Ready`, strategy approval, tuning acceptance |
 | Journal | `/weekly` (fast tier) | — |
 
 Order in delivery: analysis one sprint ahead; development one story at a time, in `PLAN.md` order, with dependencies closed. While you are on a human gate, `make next` proposes analysis work ahead.

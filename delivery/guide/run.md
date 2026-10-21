@@ -10,6 +10,7 @@
 - §6 Deviations: one `### Deviation #n` per deviation or stop condition (what changed, why, plan impact, scope impact None / Minor / Requires approval). "Requires approval" sets the RUN to `Blocked` and stops; `/run <ID> approve-deviation <n>` records the human approval and resumes.
 - A Spec changed after the strategy approval goes back to `Draft` and blocks the RUN with a deviation (`/spec`); the strategy is re-approved through that deviation.
 - `Stopped` (human, §2) resumes with `revise:`; `Cancelled` (`/run <ID> cancel: …`) is terminal.
-- §7 Persistence, §8 Quality gates, §9 Outcome, §10 Next steps are completed by `/persist`. A RUN is never `Closed` before `Persisted`.
+- §7 Persistence, §8 Quality gates (with the `CI:` line), §9 Outcome, §10 Next steps are completed by `/persist` (RUN `Persisted`). §11 Review is written by `/review-story` only (`Reviewed`, or back to `Tuning`). `/close` sets `Closed`: never before `Persisted` and an `ok-to-close` review.
+- A tuning request on a `Persisted` or `Reviewed` RUN sets it back to `Tuning`: `/persist` and the review run again.
 - After closure only `## Revisions` lines (factual corrections). A behaviour change is a new story with `supersedes`.
 - Practical: prefer short RUNs; make tasks explicit; if it is not in the RUN, it did not happen.

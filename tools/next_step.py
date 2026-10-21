@@ -115,8 +115,16 @@ def stage(i: str) -> tuple[str, str, str]:
         if st == "Stopped" or (st == "Draft" and not approved and wf.run_stopped(t)):
             return ("stopped", f"RUN stopped by you: /run {i} revise: … to resume, or /run {i} cancel: … to drop the story", "human")
         if st == "Persisted":
-            return ("review", "RUN persisted: review and closure", "agent")
+            return ("review", "RUN persisted: independent review (RUN §11)", "agent")
+        if st == "Reviewed":
+            rv = wf.run_review(t)
+            if not rv or rv["outcome"] != "ok-to-close":
+                return ("review", "RUN Reviewed without an `ok-to-close` review in RUN §11: review again", "agent")
+            return ("close", f"review #{rv['n']} ok-to-close: close the story and merge its PR", "agent")
         if st == "Tuning":
+            rv = wf.run_review(t)
+            if rv and rv["outcome"] == "changes-requested":
+                return ("tuning", f"review #{rv['n']} requested changes (RUN §11): /run {i} tuning: …, then /persist {i}", "human")
             return ("tuning", "human verification / in-scope tuning, then persistence", "human")
         if st in ("Strategy Approved", "Executing"):
             return ("execute", f"RUN {st}", "agent")
@@ -215,7 +223,7 @@ def recommend(plan: list[dict]) -> dict:
 
     # 1. development: continue the most advanced story of the current sprint (one at a time)
     if current:
-        for stg in ("review", "execute", "run-strategy", "quick", "brief-spec", "spike"):
+        for stg in ("close", "review", "execute", "run-strategy", "quick", "brief-spec", "spike"):
             for i in current["ids"]:
                 if i in states and states[i][0] == stg and deps_done(i):
                     return {**base, "step": stg, "ids": [i], "owner": "agent",

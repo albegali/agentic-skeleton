@@ -13,7 +13,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 | **product** | vision, requirements, mockup, architecture, backlog, release plan (inception); onboarding of an existing codebase | `reference/`, `backlog/`, `PLAN.md` | `workflow/steps/<step>.md` |
 | **analyst** | Analysis, workshop preparation, Refined Story, backlog consolidation | `analysis/` | `analysis/AGENT_GUIDE.md` |
 | **developer** | Brief, Spec, RUN, code, persistence | `delivery/`, code | `delivery/AGENT_GUIDE.md` |
-| **review** | consistency Brief/Spec/RUN, scope creep, quality gates | nothing (report only) | `workflow/steps/review.md` |
+| **review** | consistency Brief/Spec/RUN, scope creep, quality gates | RUN §11 and RUN status only | `workflow/steps/review.md` |
 | **journal** | weekly / monthly project journal | `project-journal/` | `workflow/steps/weekly.md` |
 
 ## 2. Lifecycle
@@ -22,7 +22,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
             existing codebase: tools/adopt.py → onboard → backlog → release plan
 ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for bug, hotfix, chore, refactor, spike, XS, or skip_analysis = true)
-DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist → review → Closed
+DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist (PR, CI) → review → close (merge)
             quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy → one approval → same as above; hotfixes first
             spike: findings note (human: Accepted) → follow-up stories; no code merged
 ```
@@ -39,7 +39,7 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 - End every step with the next command and each pending human gate as `file → field → value`: the human never has to ask what comes next or how to approve.
 - Templates in `inception/templates/`, `analysis/templates/`, `delivery/templates/` are authoritative: use them as they are.
 - No secrets or personal data in logs, artifacts or prompts.
-- Git: one branch per story (`<id-lowercase>-<slug>`, e.g. `pr0101-login`), created before the first change of the RUN; commit and push only at the end of `/persist` or when the user asks. At the end of `/persist`: commit, push the branch, open a PR if CI runs only on pull requests, wait until CI is green, then merge **every** open branch into `main`, delete those branches locally and on the remote, and push `main`. After each closed story only `main` exists and it is in sync with the remote. CI red or a merge conflict → stop, merge nothing, report.
+- Git: `delivery/guide/git.md` (single source). In short: one branch and one PR per story; `/persist` pushes and waits for CI, `/close` merges **only that story's PR** after the review; other branches are reported, never merged or deleted.
 
 ## 4. Language
 
