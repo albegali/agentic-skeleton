@@ -74,13 +74,16 @@ def main() -> None:
     if "--json" in sys.argv:
         try:
             b = wf.backlog()
-            wf.stories()  # validates the [[story]] ids
+            if errs := wf.backlog_errors():
+                raise ValueError("; ".join(errs))
         except (OSError, ValueError) as e:  # tomllib.TOMLDecodeError is a ValueError
             wf.fail_envelope("backlog", "bad_input", str(e))
         wf.dump_envelope("backlog", {"status": b.get("status"), "epics": list({e["id"]: e for e in b.get("epic", [])}.values()),
                                      "stories": [{**s, "artifacts": wf.artifacts(s["id"])} for s in b.get("story", [])]})
         return
     b = wf.backlog()
+    if errs := wf.backlog_errors():
+        sys.exit("\n".join(errs) + "\nfix backlog/stories.toml, then rerun")
     stories = b.get("story", [])
     epics = {e["id"]: e for e in b.get("epic", [])}
     if "--deps" in sys.argv:

@@ -569,6 +569,89 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertEqual((n["step"], n["files"]), ("approve", ["reference/product/vision.md"]))
         self.assertIn("unknown status 'aproved'", n["why"])
 
+    def check(self, ok: bool = True, *a: str) -> tuple[list[str], list[str]]:
+        data = json.loads(self.r.run("tools/check_workflow.py", "--json", *a, ok=ok).stdout)["data"]
+        return ([x["message"] for x in data["issues"] if x["level"] == "error"],
+                [x["message"] for x in data["issues"] if x["level"] == "warning"])
+
+    def test_backlog_schema_is_checked_before_anything_else(self):
+        r = self.r
+        r.through_inception()
+        base = STORIES.format(st="approved")
+        for toml, msg in ((base + '[[story]]\nepic = "EP-01"\n', "[[story]] #3: missing or invalid `id`"),
+                          (base.replace('["DM0101"]\nac = [["a", "b", "c"]]', '["DM0101"]\nac = [["a", "b"]]'),
+                           "DM0102: `ac` must be a list of [given, when, then] string triples"),
+                          (base.replace('size = "S"', 'size = "XXL"'), "DM0102: size 'XXL' not in XS | S | M | L | XL")):
+            r.write("backlog/stories.toml", toml)
+            errors, _ = self.check(False)
+            self.assertIn(f"backlog/stories.toml: {msg}", errors)
+            out = r.run("tools/gen_backlog.py", ok=False)
+            self.assertIn(msg, out.stderr)
+            self.assertNotIn("Traceback", out.stderr)
+
+    def test_done_and_closed_need_every_box(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        spec = SPEC_MD.format(i=i, st="Done") + "# 4. Acceptance Criteria\n- [x] AC1: a\n- [ ] AC2: b\n- [ ] AC3: c (deferred to DM0102)\n" \
+            "# 7. Quality Gates\n- [x] Tests added\n- [ ] Build passes\n"
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", spec)
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x").replace("- [x] Spec updated", "- [ ] Spec updated") \
+            + "# 8. Quality Gates Check\n- [x] Tests passing\n- [ ] No scope creep\n# 9. Outcome\n- [x] Yes\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        errors, _ = self.check(False)
+        self.assertIn("SPEC-DM0101 Done with unchecked acceptance criteria: AC2: b", errors)
+        self.assertIn("SPEC-DM0101 Done with unchecked quality gates: Build passes", errors)
+        self.assertIn("RUN-DM0101: Closed with unchecked quality gates: No scope creep", errors)
+        self.assertIn("RUN-DM0101: Closed without Persistence", errors)  # the [x] in §9 does not count for §7
+
+    def test_plan_matches_the_backlog(self):
+        r = self.r
+        r.through_inception()
+        stories = STORIES.format(st="approved") + '[[story]]\nid = "DM0103"\nepic = "EP-01"\nslug = "import"\ntitle = "Import"\n' \
+            'priority = "Must"\nrelease = "R1"\nsize = "L"\ndeps = ["DM0102"]\nac = [["a", "b", "c"]]\n'
+        r.write("backlog/stories.toml", stories.replace('size = "M"', 'size = "M"\nrelease = "R1"'))
+        plan = ("---\nstatus: approved\nstart: 2099-01-05\ncapacity: 3\n---\n# PLAN\n| Release | Content | Target | Exit |\n|---|---|---|---|\n"
+                "| R1 | EP-01 | 2099-01-20 | x |\n| Sprint | Dates | Goal | Stories |\n|---|---|---|---|\n"
+                "| S1 | 05/01 – 16/01 | a | DM0103, DM0101, DM0199, EP-09 |\n| S2 | 19/01 – 30/01 | b | DM0102 |\n")
+        r.write("PLAN.md", plan)
+        errors, warnings = self.check(False)
+        self.assertIn("PLAN.md: unknown story DM0199 (S1)", errors)
+        self.assertIn("PLAN.md: unknown epic EP-09", errors)
+        self.assertIn("PLAN.md: DM0103 (S1) depends on DM0102, planned later (S2)", warnings)
+        self.assertIn("PLAN.md: S1 has 5 points, capacity 3", warnings)
+        r.write("PLAN.md", plan.replace(", DM0199, EP-09", "").replace("| DM0102 |", "| — |").replace("2099", "2000"))
+        errors, warnings = self.check()
+        self.assertIn("PLAN.md: stories in no sprint: DM0102", warnings)
+        self.assertIn("PLAN.md: S1 ended 2000-01-16 with open stories DM0103, DM0101: update the plan", warnings)
+        r.write("PLAN.md", plan.replace(", DM0199, EP-09", "").replace("| DM0102 |", "| DM0102, DM0103 |")
+                .replace("| DM0103, DM0101 |", "| DM0101 |"))
+        _, warnings = self.check()
+        self.assertIn("PLAN.md: Must story DM0103 planned in S2 (ends 2099-01-30), after R1 target 2099-01-20", warnings)
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('deps = ["DM0101"]', 'deps = ["DM0101", "DM0999"]'))
+        self.assertFalse(r.next("DM0102")["deps_done"])  # an unknown dependency is never done
+
+    def test_placeholders_and_revisions(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 3. Log\n- …\n```\n- …\n<Date>\n```\nUses `List<String>` and <Date>\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        _, warnings = self.check()
+        self.assertIn("RUN-DM0101: 2 template placeholder(s) left (line 12, 17)", warnings)
+        for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@x", "commit", "-qm", "closed"]):
+            subprocess.run(["git", *cmd], cwd=r.dir, check=True, capture_output=True)
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + "\nlate edit\n")
+        _, warnings = self.check(True, "--git")
+        self.assertTrue(any(w.startswith("delivery/30-runs/RUN-DM0101.md: changed after closure") for w in warnings), warnings)
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + "\nlate edit\n## Revisions\n- 2026-10-21: late edit (owner)\n")
+        _, warnings = self.check(True, "--git")
+        self.assertFalse(any("changed after closure" in w for w in warnings), warnings)
+        self.assertFalse(any("changed after closure" in w for w in self.check()[1]))  # opt-in only
+
     def test_invalid_settings_json_is_reported(self):
         r = self.r
         r.write(".claude/settings.json", "{not json")

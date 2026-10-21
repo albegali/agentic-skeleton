@@ -4,6 +4,7 @@ The repository root is the parent of tools/, or $WF_ROOT when set (used by the t
 """
 from __future__ import annotations
 
+import datetime as dt
 import glob
 import json
 import os
@@ -137,6 +138,40 @@ def id_rx() -> str:
 def norm_id(x: str) -> str:
     """A story ID as typed by a human or an agent (`pr-0101`, `PR0101`) in its canonical form `PR0101`."""
     return x.replace("-", "").upper()
+
+
+STORY_KEYS = {"id": str, "epic": str, "slug": str, "title": str}
+STORY_LISTS = ("fr", "nfr", "deps")
+SIZES = ("XS", "S", "M", "L", "XL")
+PRIORITIES = ("Must", "Should", "Could", "Won't")
+POINTS = {"XS": 1, "S": 1, "M": 2, "L": 3, "XL": 5}  # default story points per size (PLAN.md `points:` overrides)
+
+
+def backlog_errors() -> list[str]:
+    """Schema problems of backlog/stories.toml that would crash or mislead the other tools (empty = valid)."""
+    out = []
+    for n, s in enumerate(backlog().get("story", []), 1):
+        if not isinstance(s, dict):
+            out.append(f"[[story]] #{n} is not a table")
+            continue
+        who = s.get("id") if isinstance(s.get("id"), str) else f"[[story]] #{n}"
+        for k, t in STORY_KEYS.items():
+            if not isinstance(s.get(k), t) or not s.get(k):
+                out.append(f"{who}: missing or invalid `{k}`")
+        for k in STORY_LISTS:
+            if k in s and not (isinstance(s[k], list) and all(isinstance(x, str) for x in s[k])):
+                out.append(f"{who}: `{k}` must be a list of strings")
+        ac = s.get("ac", [])
+        if not isinstance(ac, list) or any(not (isinstance(a, list) and len(a) == 3 and all(isinstance(x, str) for x in a)) for a in ac):
+            out.append(f"{who}: `ac` must be a list of [given, when, then] string triples")
+        if s.get("size") not in (None, *SIZES):
+            out.append(f"{who}: size '{s.get('size')}' not in {' | '.join(SIZES)}")
+        if s.get("priority") not in (None, *PRIORITIES):
+            out.append(f"{who}: priority '{s.get('priority')}' not in {' | '.join(PRIORITIES)}")
+    for n, e in enumerate(backlog().get("epic", []), 1):
+        if not isinstance(e, dict) or not isinstance(e.get("id"), str):
+            out.append(f"[[epic]] #{n} has no id")
+    return [f"backlog/stories.toml: {m}" for m in out]
 
 
 def stories() -> dict[str, dict]:
@@ -291,6 +326,36 @@ def sprints() -> list[dict]:
             ids += [k for k, s in st.items() if s.get("epic") == tok] if tok.startswith("EP-") else [tok]
         out.append({"sprint": m.group(1), "dates": m.group(2).strip(), "goal": m.group(3).strip(),
                     "ids": list(dict.fromkeys(ids))})
+    return out
+
+
+def plan_date(text: str, year: int) -> dt.date | None:
+    """`2026-10-26`, `26/10/2026` or `26/10` (year given) as a date; None if unparsable."""
+    try:
+        if m := re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text.strip()):
+            return dt.date(int(m[1]), int(m[2]), int(m[3]))
+        if m := re.fullmatch(r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?", text.strip()):
+            return dt.date(int(m[3] or year), int(m[2]), int(m[1]))
+    except ValueError:
+        pass
+    return None
+
+
+def sprint_ends() -> dict[str, dt.date]:
+    """End date of each sprint row of PLAN.md (`DD/MM – DD/MM` takes its year from frontmatter `start:`, else this year)."""
+    if not exists("PLAN.md"):
+        return {}
+    start = plan_date(front(read("PLAN.md"), "start") or "", 0)
+    year = start.year if start else dt.date.today().year
+    out, prev = {}, None
+    for s in sprints():
+        parts = re.split(r"\s+[–-]\s+|\s*–\s*", s["dates"])
+        end = plan_date(parts[-1], year)
+        if end and prev and end < prev and re.fullmatch(r"\d{1,2}/\d{1,2}", parts[-1].strip()):
+            year += 1  # DD/MM rows crossing the new year
+            end = plan_date(parts[-1], year)
+        if end:
+            out[s["sprint"]] = prev = end
     return out
 
 
