@@ -8,7 +8,7 @@ Arguments (<ID>): ${input:args}
 
 Developer mode, ID the arguments above (`delivery/AGENT_GUIDE.md` §7, steps 7-8).
 1. Update the Spec (§11) and only the `reference/` docs touched by the story.
-2. Complete RUN §7-10: status `Persisted`, then `Closed` if the quality gates are met.
+2. Complete RUN §7-10: status `Persisted`, then `Closed` if the quality gates are met; Spec status `Done`. Tasks split off into new stories (`split_from`) are listed under §9 Tasks deferred with the new ID.
 3. Fill "Closed at" and "Derived Artifacts" in the Brief; update `delivery/20-specs/README.md`.
 4. Run `make check`.
 5. Git (`AGENTS.md` §3): commit, push the story branch, open a PR if CI runs only on pull requests, wait for green CI; then merge every open branch into `main`, delete them locally and on the remote, push `main`. CI red or conflict → stop and report.

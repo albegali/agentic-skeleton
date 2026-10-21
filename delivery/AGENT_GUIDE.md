@@ -5,8 +5,8 @@ Agent-supervised coding, RUN-centric. Three artifacts, three questions:
 | Artifact | Folder | Answers | Lifecycle |
 |---|---|---|---|
 | **Brief** | `delivery/10-briefs/BRIEF-<ID>-<slug>.md` | *why* — frozen snapshot of the request | Captured → Refined into Spec / Superseded |
-| **Spec** | `delivery/20-specs/SPEC-<ID>-<slug>.md` | *what is allowed* — the contract | Draft → Ready → In Progress → Done / Blocked |
-| **RUN** | `delivery/30-runs/RUN-<ID>.md` | *what happened* — execution trace | Draft → Strategy Approved → Executing → Tuning → Persisted → Closed |
+| **Spec** | `delivery/20-specs/SPEC-<ID>-<slug>.md` | *what is allowed* — the contract | Draft → Ready → In Progress → Done · Blocked / Cancelled |
+| **RUN** | `delivery/30-runs/RUN-<ID>.md` | *what happened* — execution trace | Draft → Strategy Approved → Executing → Tuning → Persisted → Closed · Stopped / Blocked / Cancelled |
 
 Tasks: `TSK-<ID>-NN`. IDs are stable for the life of the work item. Templates in `delivery/templates/` are authoritative.
 Sections loaded only when needed: `delivery/guide/run.md` (RUN rules), `delivery/guide/hotfix.md`, `delivery/guide/refactor-nfr.md`.
@@ -32,12 +32,19 @@ Upstream (`analysis/`, Refined Story) feeds Brief and Spec. Once Brief, Spec and
 1. **Capture intent** (human + agent) → Brief.
 2. **Create Spec** (human + agent) → status Draft; the human sets `Ready`.
 3. **Start RUN** (agent): read the Spec, the package `AGENTS.md` files in scope, the RUN template; write §1 Execution Strategy listing the package rules read. **No code before a human approves the strategy** (RUN §2).
-4. **Approval** (human): approve, revise or stop.
-5. **Execute** (agent): implement, test, update reference docs if needed; log in RUN §3-4.
+4. **Approval** (human): approve (Spec → In Progress), revise or stop.
+5. **Execute** (agent): RUN → Executing; implement, test, update reference docs if needed; log in RUN §3-4; when every plan step is done → Tuning. A stop condition or a deviation needing approval → RUN §6 entry, Blocked.
 6. **Verify & tune** (human + agent): bug fixes, test improvements, small refactors, minimal changes needed to meet AC. No new features.
-7. **Persistence** (agent): update Spec §11 and the reference docs to the final accepted state; do not copy execution history into the Spec.
+7. **Persistence** (agent): update Spec §11 and the reference docs to the final accepted state (Spec → Done); do not copy execution history into the Spec.
 8. **Close RUN**: quality gates met, persistence done, deviations documented; then close the Brief (Closed at, Derived Artifacts).
 9. **Sync git** (agent): commit and push the story branch, wait for green CI, merge every open branch into `main`, delete them (local and remote), push `main` (`AGENTS.md` §3).
+
+## 5a. Changes of course
+- **Scope change mid-RUN**: `/spec` → Spec Draft, RUN Blocked with a §6 deviation; the human sets the Spec Ready and approves the deviation.
+- **Split**: the part not delivered becomes a new story in `backlog/stories.toml` with `split_from = "<ID>"`; the RUN lists its tasks under §9 Tasks deferred with the new ID.
+- **Cancel**: owner decision, `/run <ID> cancel: <reason>` → story `status = "cancelled"`, RUN/Spec Cancelled, Brief Superseded.
+- **Replace**: a new story with `supersedes = "<ID>"`; an open story it replaces gets `status = "superseded"`. Cancelled and superseded stories count as done in the plan.
+- **After closure**: never reopen a closed RUN. Factual corrections → `## Revisions`; a behaviour change → new story with `supersedes`.
 
 ## 6. Index
 `delivery/20-specs/README.md`: one row per Spec (`| ID | Title | Status | RUN |`), kept simple. No RUN index: RUNs are reached through their Spec.

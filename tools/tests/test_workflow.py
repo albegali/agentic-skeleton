@@ -652,6 +652,79 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertFalse(any("changed after closure" in w for w in warnings), warnings)
         self.assertFalse(any("changed after closure" in w for w in self.check()[1]))  # opt-in only
 
+    def test_run_stops_blocks_and_resumes(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="In Progress"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Tuning", plan="build", ok="x"))
+        self.assertEqual(r.next(i)["step"], "tuning")
+        stopped = RUN.format(i=i, st="Draft", plan="build", ok=" ").replace("# 7.", "- [x] Stopped\n# 7.")
+        r.write(f"delivery/30-runs/RUN-{i}.md", stopped)
+        n = r.next(i)
+        self.assertEqual((n["step"], n["owner"]), ("stopped", "human"))
+        self.assertIn("/run DM0101 revise:", n["why"])
+        dev = "# 6. Deviations\n### Deviation #1\n- What changed: x\n- Scope impact: Minor\n" \
+              "### Deviation #2\n- What changed: y\n- Scope impact: Requires approval\n- Approved by:\n- Date:\n"
+        blocked = RUN.format(i=i, st="Blocked", plan="build", ok="x").replace("# 7.", dev + "# 7.")
+        r.write(f"delivery/30-runs/RUN-{i}.md", blocked)
+        n = r.next(i)
+        self.assertEqual((n["step"], n["owner"]), ("blocked", "human"))
+        self.assertIn("approve-deviation 2", n["why"])
+        self.assertIn("human-gate.md", r.run("tools/next_step.py", i).stdout)
+        r.run("tools/check_workflow.py")
+        r.write(f"delivery/30-runs/RUN-{i}.md", blocked.replace("- Approved by:", "- Approved by: PO"))
+        _, warnings = self.check()
+        self.assertIn("RUN-DM0101: Blocked without a §6 deviation awaiting approval (`Scope impact: Requires approval`)", warnings)
+        # a Spec changed after the approval: the human reviews it first, then approves the deviation
+        r.write(f"delivery/30-runs/RUN-{i}.md", blocked)
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Draft"))
+        self.assertEqual(r.next(i)["step"], "spec-approval")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Blocked"))
+        self.assertEqual(r.next(i)["step"], "blocked")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        self.assertIn("approve-deviation 2", r.next(i)["why"])
+        r.write(f"delivery/30-runs/RUN-{i}.md", blocked.replace("Blocked", "Executing", 1).replace("- Approved by:", "- Approved by: PO"))
+        self.assertEqual(r.next(i)["step"], "execute")
+
+    def test_cancelled_superseded_and_skipped_stories(self):
+        r = self.r
+        r.through_inception()
+        stories = STORIES.format(st="approved")
+        r.write("backlog/stories.toml", stories.replace('size = "S"', 'size = "S"\nskip_analysis = true'))
+        self.assertEqual(r.next("DM0102")["step"], "brief-spec")
+        self.assertEqual(r.next("DM0101")["step"], "analysis")
+        # a cancelled story counts as done: the sprint moves on, its dependant is warned
+        r.write("backlog/stories.toml", stories.replace('size = "M"', 'size = "M"\nstatus = "cancelled"'))
+        self.assertEqual((r.next("DM0101")["step"], r.next("DM0101")["owner"]), ("done", "done"))
+        self.assertTrue(r.next("DM0102")["deps_done"])
+        n = r.next()
+        self.assertEqual((n["step"], n["ids"]), ("analysis", ["DM0102"]))
+        _, warnings = self.check()
+        self.assertIn("DM0102: depends on cancelled story DM0101: drop the dependency or cancel DM0102", warnings)
+        r.write("delivery/10-briefs/BRIEF-DM0101-walking-skeleton.md", BRIEF_MD.format(i="DM0101"))
+        r.write("delivery/20-specs/SPEC-DM0101-walking-skeleton.md", SPEC_MD.format(i="DM0101", st="In Progress"))
+        r.write("delivery/30-runs/RUN-DM0101.md", RUN.format(i="DM0101", st="Executing", plan="build", ok="x"))
+        _, warnings = self.check()
+        self.assertIn("RUN-DM0101: story cancelled but RUN Executing: set the RUN to Cancelled", warnings)
+        r.write("delivery/30-runs/RUN-DM0101.md", RUN.format(i="DM0101", st="Cancelled", plan="build", ok=" "))
+        r.write("delivery/20-specs/SPEC-DM0101-walking-skeleton.md", SPEC_MD.format(i="DM0101", st="Cancelled"))
+        _, warnings = self.check()
+        self.assertFalse(any("RUN-DM0101" in w for w in warnings), warnings)
+        # superseded: the successor is named; links must exist
+        sup = stories.replace('size = "M"', 'size = "M"\nstatus = "superseded"').replace('slug = "export"', 'slug = "export"\nsupersedes = "DM0101"')
+        r.write("backlog/stories.toml", sup)
+        self.assertEqual(r.next("DM0101")["why"], "story superseded by DM0102")
+        r.write("backlog/stories.toml", sup.replace('supersedes = "DM0101"', 'split_from = "DM0199"'))
+        errors, warnings = self.check(False)
+        self.assertIn("DM0102: `split_from` names unknown story DM0199", errors)
+        self.assertIn('DM0101: superseded, but no story has `supersedes` or `split_from` = "DM0101"', warnings)
+        r.write("backlog/stories.toml", stories.replace('size = "M"', 'size = "M"\nstatus = "dropped"\nskip_analysis = "yes"'))
+        errors, _ = self.check(False)
+        self.assertIn("backlog/stories.toml: DM0101: status 'dropped' not in open | cancelled | superseded", errors)
+        self.assertIn("backlog/stories.toml: DM0101: `skip_analysis` must be true or false", errors)
+
     def test_invalid_settings_json_is_reported(self):
         r = self.r
         r.write(".claude/settings.json", "{not json")

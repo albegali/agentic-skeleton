@@ -142,8 +142,10 @@ def norm_id(x: str) -> str:
 
 STORY_KEYS = {"id": str, "epic": str, "slug": str, "title": str}
 STORY_LISTS = ("fr", "nfr", "deps")
+STORY_LINKS = ("supersedes", "split_from")  # another story's ID
 SIZES = ("XS", "S", "M", "L", "XL")
 PRIORITIES = ("Must", "Should", "Could", "Won't")
+STORY_STATES = ("open", "cancelled", "superseded")  # per-story `status`; cancelled / superseded count as done
 POINTS = {"XS": 1, "S": 1, "M": 2, "L": 3, "XL": 5}  # default story points per size (PLAN.md `points:` overrides)
 
 
@@ -168,6 +170,13 @@ def backlog_errors() -> list[str]:
             out.append(f"{who}: size '{s.get('size')}' not in {' | '.join(SIZES)}")
         if s.get("priority") not in (None, *PRIORITIES):
             out.append(f"{who}: priority '{s.get('priority')}' not in {' | '.join(PRIORITIES)}")
+        if s.get("status") not in (None, *STORY_STATES):
+            out.append(f"{who}: status '{s.get('status')}' not in {' | '.join(STORY_STATES)}")
+        for k in STORY_LINKS:
+            if k in s and not (isinstance(s[k], str) and s[k]):
+                out.append(f"{who}: `{k}` must be a story ID")
+        if "skip_analysis" in s and not isinstance(s["skip_analysis"], bool):
+            out.append(f"{who}: `skip_analysis` must be true or false")
     for n, e in enumerate(backlog().get("epic", []), 1):
         if not isinstance(e, dict) or not isinstance(e.get("id"), str):
             out.append(f"[[epic]] #{n} has no id")
@@ -239,8 +248,8 @@ STATUSES = {
     "analysis": ("draft", "analyzed", "workshop-ready", "updated"),
     "refined": ("draft", "refined", "approved"),
     "brief": ("Captured", "Refined into Spec", "Superseded", "Closed"),
-    "spec": ("Draft", "Ready", "In Progress", "Done", "Blocked"),
-    "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed"),
+    "spec": ("Draft", "Ready", "In Progress", "Done", "Blocked", "Cancelled"),
+    "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed", "Stopped", "Blocked", "Cancelled"),
 }
 
 
@@ -270,6 +279,23 @@ def run_approved(text: str) -> bool:
     """RUN §2 Human Approval has `- [x] Approved` ticked (case-insensitive box; prose elsewhere does not count)."""
     sec = heading_section(text, r"^#\s+2\.") or ""
     return bool(re.search(r"^\s*-\s*\[[xX]\]\s*Approved\b", sec, re.M))
+
+
+def run_stopped(text: str) -> bool:
+    """RUN §2 Human Approval has `- [x] Stopped` ticked."""
+    sec = heading_section(text, r"^#\s+2\.") or ""
+    return bool(re.search(r"^\s*-\s*\[[xX]\]\s*Stopped\b", sec, re.M))
+
+
+def open_deviations(text: str) -> list[str]:
+    """Numbers of the RUN §6 entries `### Deviation #n` with scope impact `Requires approval` and no `Approved by:` value."""
+    out = []
+    for m in re.finditer(r"^###\s+Deviation\s+#(\d+)\b(.*?)(?=^#{1,3}\s|\Z)", heading_section(text, r"^#\s+6\.") or "", re.M | re.S):
+        body = m.group(2)
+        needs = re.search(r"^\s*-\s*Scope impact:[ \t]*\**Requires approval\**[ \t]*$", body, re.M | re.I)
+        if needs and not re.search(r"^\s*-\s*Approved by:[ \t]*\S", body, re.M):
+            out.append(m.group(1))
+    return out
 
 
 def strategy_written(text: str) -> bool:

@@ -12,9 +12,11 @@
 ---
 
 ## Status
-Draft → Strategy Approved → Executing → Tuning → Persisted → Closed
+Draft → Strategy Approved → Executing → Tuning → Persisted → Closed  ·  Stopped / Blocked / Cancelled
 
 > A RUN MUST NOT be Closed before Persisted.
+> Stopped: the human stopped it at §2 (resume with `/run <ID> revise: …`). Blocked: a §6 deviation awaits approval
+> (`/run <ID> approve-deviation <n>`). Cancelled: the story was dropped (`/run <ID> cancel: …`); terminal.
 
 ---
 
@@ -115,9 +117,15 @@ If FAIL → move to Tuning.
 
 # 6. Deviations
 
+> One entry per deviation or stop condition. `Requires approval` sets the RUN to Blocked until a human approves it.
+
+### Deviation #1
 - What changed:
 - Why:
+- Plan impact:
 - Scope impact: None / Minor / Requires approval
+- Approved by:
+- Date:
 
 ---
 
@@ -167,8 +175,8 @@ Summary:
 
 ---
 
-# 11. Addendum (Post-Closure Only)
+## Revisions
 
-### <Date>
-- Note:
-- Impact:
+> Post-closure only: factual corrections (links, typos, recorded results), one line each with date and source.
+> A change in behaviour is a new story with `supersedes = "<ID>"` in `backlog/stories.toml`, never a revision.
+

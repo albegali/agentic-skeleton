@@ -8,7 +8,10 @@
 ---
 
 ## Status
-Draft → Ready → In Progress → Done / Blocked
+Draft → Ready → In Progress → Done  ·  Blocked / Cancelled
+
+> Ready: set by the human. In Progress: set when the RUN strategy is approved. Done: set by `/persist`.
+> A change after the RUN approval sets it back to Draft and blocks the RUN until the change is approved.
 
 ---
 

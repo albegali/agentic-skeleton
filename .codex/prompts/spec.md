@@ -6,4 +6,6 @@ argument-hint: "<ID> <requested changes>"
 > Recommended model: **gpt-5-codex** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Developer mode. Arguments: $ARGUMENTS. Update only `delivery/20-specs/SPEC-<ID>-*.md` as requested, following `delivery/templates/SPEC-template.md`.
-Do not touch the Brief, except for an Addendum if the intent changes. Chat: 3 lines with what changed.
+Do not touch the Brief, except for an Addendum (Brief §8) if the intent changes.
+If the RUN strategy is already approved (RUN §2) and the RUN is not Closed/Cancelled: set the Spec to `Draft`, add a RUN §6 `Deviation #n` (what changed in the Spec, plan impact, `Scope impact: Requires approval`) and set the RUN to `Blocked`. The human sets the Spec back to `Ready`, then runs `/run <ID> approve-deviation <n>`.
+Chat: 3 lines with what changed and, if the RUN was blocked, the two pending gates.

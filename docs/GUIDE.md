@@ -346,10 +346,10 @@ The Analysis chat reply lists only the high-impact questions: that is your works
 | Brief + Spec | agent (developer) | `/brief CP0101` | Brief (frozen request) and Spec (the contract: scope, AC, tasks `TSK-CP0101-NN`, boundaries, quality gates, stop conditions). Status Draft. |
 | Spec review | **you** | `/spec CP0101 <changes>` if needed | set `## Status` → `Ready` |
 | Strategy | agent | `/run CP0101` | RUN §1: plan in small steps, assumptions, risks, package rules read. **No code.** |
-| Approval | **you** | `/run CP0101 approve` (same session) | recorded in RUN §2, then execution starts |
-| Execution | agent | (continues) or `/run CP0101` to resume | code and tests step by step, RUN §3-4 updated |
+| Approval | **you** | `/run CP0101 approve` (same session) | recorded in RUN §2, Spec → In Progress, then execution starts |
+| Execution | agent | (continues) or `/run CP0101` to resume | code and tests step by step, RUN §3-4 updated; RUN → Tuning when every step is done, Blocked on a deviation that needs you (`/run CP0101 approve-deviation 1`) |
 | Tuning | **you** → agent | `/run CP0101 tuning: the export ignores filters` | in-scope fixes, logged in RUN §5 |
-| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; RUN → Persisted → Closed; `make check` |
+| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; RUN → Persisted → Closed, Spec → Done; `make check` |
 | Review | agent, fresh eyes | `/review-story CP0101` | `file:line → problem → request`, or "OK to close" |
 
 Rules agents follow, and that you can hold them to:
@@ -444,7 +444,11 @@ What you should do:
 |---|---|
 | New or changed requirement | rerun `/requirements <source>`: IDs are never renumbered, and deprecated items keep their ID; approve; then `/backlog` for the stories affected |
 | New story mid-project | add it to `stories.toml` (next free ID in its epic) → `make backlog` → put it in a sprint in `PLAN.md` |
-| Story turns out too big | stop at the Spec, split it in `stories.toml`, update `PLAN.md` |
+| Story turns out too big | before the RUN: split it in `stories.toml`, update `PLAN.md`; during the RUN: new story with `split_from = "<ID>"`, deferred tasks listed in RUN §9 |
+| Scope change during the RUN | `/spec <ID> <change>`: Spec → Draft, RUN → Blocked; set the Spec Ready, then `/run <ID> approve-deviation <n>` |
+| Story no longer wanted | `/run <ID> cancel: <reason>`: story `status = "cancelled"`, RUN/Spec Cancelled; it counts as done in the plan |
+| Change to a closed story | new story with `supersedes = "<ID>"`; the closed RUN only gets `## Revisions` lines for factual corrections |
+| Small or technical story | `skip_analysis = true` in `stories.toml`: `make next` goes straight to `/brief` |
 | Decision reversed | new ADR with `status: accepted` and the old one `superseded by ADR-xxx`; mention it in the weekly |
 | Clarification after the Brief is frozen | add an Brief Addendum (§8) and update the Spec; never rewrite the original intent |
 | Production bug | hotfix flow: Brief (Hotfix) → RUN → Spec reconciliation (`delivery/guide/hotfix.md`) |
