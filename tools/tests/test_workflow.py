@@ -1138,7 +1138,8 @@ class SecurityTest(unittest.TestCase):
         r = self.r
         aws = "AKIA" + "QWERTYUIOPASDFGH"  # built at runtime: the repository itself must scan clean
         gh = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
-        r.write("src/config.py", f'AWS = "{aws}"\npassword = "Zx9!qR7#vL2@pW5k"\nexample_token = "changeme-please"\n')
+        pw = "Zx9!qR7#" + "vL2@pW5k"
+        r.write("src/config.py", f'AWS = "{aws}"\npassword = "{pw}"\nexample_token = "changeme-please"\n')
         r.write("delivery/30-runs/RUN-DM0101.md", f"# RUN\nused token {gh} to test\nkey {aws}  # secret-scan: ignore\n")
         out = r.run("tools/secret_scan.py", "--json", "src/config.py", "delivery/30-runs/RUN-DM0101.md", ok=False)
         self.assertEqual(out.returncode, 1)
