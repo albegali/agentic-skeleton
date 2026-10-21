@@ -84,6 +84,9 @@ def stage(i: str) -> tuple[str, str, str]:
     if story.get("status") == "superseded":
         by = [k for k, s in wf.stories().items() if i in (s.get("supersedes"), s.get("split_from"))]
         return ("done", f"story superseded{' by ' + ', '.join(by) if by else ''}", "done")
+    track = wf.track(story)
+    if track == "spike":
+        return spike_stage(i)
     analysis, refined, brief, spec, run = (wf.find(k, i) for k in ("analysis", "refined", "brief", "spec", "run"))
     if run:
         t = wf.read(run)
@@ -127,6 +130,8 @@ def stage(i: str) -> tuple[str, str, str]:
         st = wf.status("spec", raw)
         if not st:
             return bad_status(spec, "spec", raw)
+        if st == "Draft" and track == "quick":
+            return ("quick", "quick track: Spec draft, RUN strategy missing", "agent")
         if st == "Draft":
             return ("spec-approval", "Spec draft: human review, status → Ready", "human")
         if st == "Blocked":
@@ -135,6 +140,8 @@ def stage(i: str) -> tuple[str, str, str]:
             return ("done", "Spec cancelled", "done")
         return ("run-strategy", f"Spec {st}, RUN missing", "agent")
     if brief:
+        if track == "quick":
+            return ("quick", "quick track: Brief present, Spec and RUN strategy missing", "agent")
         return ("brief-spec", "Brief present, Spec missing", "agent")
     if refined:
         t = wf.read(refined)
@@ -145,6 +152,8 @@ def stage(i: str) -> tuple[str, str, str]:
         if refined_not_ready(t):
             return ("workshop", "Refined Story 'not ready': another refinement is needed", "human")
         if st in ("refined", "approved"):
+            if track == "quick":
+                return ("quick", f"Refined Story {st}: ready for the quick track", "agent")
             return ("brief-spec", f"Refined Story {st}: ready for the Brief", "agent")
         return ("refine", f"Refined Story {st}: to be completed", "agent")
     if analysis:
@@ -153,9 +162,25 @@ def stage(i: str) -> tuple[str, str, str]:
         if not st:
             return bad_status(analysis, "analysis", raw)
         return ("workshop", f"Analysis {st}: workshop needed, then the Refined Story with its evidence", "human")
-    if story.get("skip_analysis"):
-        return ("brief-spec", "no artifact yet; analysis skipped (skip_analysis = true)", "agent")
+    if wf.skips_analysis(story):
+        why = "skip_analysis = true" if story.get("skip_analysis") else f"type {story.get('type') or 'XS'}"
+        if track == "quick":
+            return ("quick", f"no artifact yet; quick track ({why}): Brief, Spec and RUN strategy, one approval", "agent")
+        return ("brief-spec", f"no artifact yet; analysis skipped ({why})", "agent")
     return ("analysis", "no artifact yet", "agent")
+
+
+def spike_stage(i: str) -> tuple[str, str, str]:
+    note = wf.one(wf.SPIKE.format(i=i))
+    if not note:
+        return ("spike", "spike: time-boxed investigation, findings note and follow-up stories", "agent")
+    raw = wf.md_status(wf.read(note)) or "Draft"
+    st = wf.status("spike", raw)
+    if not st:
+        return bad_status(note, "spike", raw)
+    if st == "Accepted":
+        return ("done", "spike findings accepted", "done")
+    return ("spike-review", "spike findings: review, add the follow-up stories, status → Accepted", "human")
 
 
 def refined_not_ready(text: str) -> bool:
@@ -178,12 +203,19 @@ def recommend(plan: list[dict]) -> dict:
     current = next((sp for sp in plan if sp["ids"] and any(states.get(i, ("done",))[0] != "done" for i in sp["ids"])), None)
     idx = plan.index(current) if current else len(plan)
     nxt = next((sp for sp in plan[idx + 1:] if sp["ids"]), None)
-    human = [(i, s) for i, s in states.items() if s[2] == "human"]
+    hotfixes = {i: stage(i) for i, s in st.items() if s.get("type") == "hotfix" and i not in states}
+    hotfixes = {i: g for i, g in hotfixes.items() if g[2] != "done"}  # open hotfixes run ahead of the plan, planned or not
+    human = [(i, s) for i, s in {**hotfixes, **states}.items() if s[2] == "human"]
     base = {"current": current, "next_sprint": nxt, "human_gates": human, "states": states}
+
+    # 0. hotfixes first
+    for i, s in sorted({**hotfixes, **{k: g for k, g in states.items() if st[k].get("type") == "hotfix"}}.items()):
+        if s[2] == "agent":
+            return {**base, "step": s[0], "ids": [i], "owner": "agent", "why": f"hotfix {i} ahead of the sprint order ({s[1]})"}
 
     # 1. development: continue the most advanced story of the current sprint (one at a time)
     if current:
-        for stg in ("review", "execute", "run-strategy", "brief-spec"):
+        for stg in ("review", "execute", "run-strategy", "quick", "brief-spec", "spike"):
             for i in current["ids"]:
                 if i in states and states[i][0] == stg and deps_done(i):
                     return {**base, "step": stg, "ids": [i], "owner": "agent",

@@ -9,6 +9,6 @@
 Explicit switch to developer mode for {ID}. Respect the budget printed by tools/context.py.
 1. Brief in delivery/10-briefs/ (Brief template): keep the original wording.
 2. Spec in delivery/20-specs/ (Spec template): scope, AC, tasks TSK-{ID}-NN, boundaries, quality gates, stop conditions; constraints from the cited ADRs/NFRs.
-3. Add the row to delivery/20-specs/README.md.
+3. Add the row to delivery/20-specs/README.md. Type refactor or NFR work: also follow delivery/guide/refactor-nfr.md.
 Stop after the Spec (status Draft). Chat: 5 lines with scope, number of AC and tasks, open doubts.
 ```

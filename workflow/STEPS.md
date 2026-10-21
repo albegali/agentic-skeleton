@@ -17,6 +17,9 @@ Order: inception (kickoff → requirements → mockup → architecture → backl
 | [`workshop`](steps/workshop.md) | human | analyst | — | — | — | — | — | — | — |
 | [`refine`](steps/refine.md) | agent | analyst | /refine | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | sonnet | fresh; stories of the same workshop together (max 4) |
 | [`brief-spec`](steps/brief-spec.md) | agent | developer | /brief | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | sonnet | fresh; one story |
+| [`quick`](steps/quick.md) | agent | developer | /quick | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | sonnet | fresh; stays open for approval and execution |
+| [`spike`](steps/spike.md) | agent | developer | /spike | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | sonnet | fresh; one spike |
+| [`spike-review`](steps/spike-review.md) | human | developer | — | — | — | — | — | — | — |
 | [`spec-approval`](steps/spec-approval.md) | human | developer | — | — | — | — | — | — | — |
 | [`run-strategy`](steps/run-strategy.md) | agent | developer | /run | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | sonnet | fresh; stays open for approval and execution |
 | [`run-approval`](steps/run-approval.md) | human | developer | — | — | — | — | — | — | — |
@@ -26,4 +29,4 @@ Order: inception (kickoff → requirements → mockup → architecture → backl
 | [`human-gate`](steps/human-gate.md) | human | meta | — | — | — | — | — | — | — |
 | [`weekly`](steps/weekly.md) | agent | journal | /weekly | fast | haiku | gpt-5-mini | Claude Haiku 5.5 | haiku | fresh |
 
-Commands: `/next`, `/choose-models`, `/kickoff`, `/onboard`, `/requirements`, `/mockup`, `/architecture`, `/backlog`, `/release-plan`, `/analysis`, `/refine`, `/brief`, `/spec`, `/run`, `/persist`, `/review-story`, `/weekly`.
+Commands: `/next`, `/choose-models`, `/kickoff`, `/onboard`, `/requirements`, `/mockup`, `/architecture`, `/backlog`, `/release-plan`, `/analysis`, `/refine`, `/brief`, `/quick`, `/spike`, `/spec`, `/run`, `/persist`, `/review-story`, `/weekly`.

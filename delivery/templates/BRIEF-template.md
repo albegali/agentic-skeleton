@@ -15,7 +15,7 @@ Captured → Refined into Spec → Closed / Superseded
 ---
 
 ## Type
-Feature | Improvement | Refactor | NFR | Hotfix
+Feature | Technical | Bug | Hotfix | Chore | Refactor | NFR
 
 ---
 
@@ -36,7 +36,7 @@ What the customer appears to want.
 
 ---
 
-# 3. Impact (Required for Hotfix)
+# 3. Impact (Required for Bug and Hotfix)
 
 Describe what is broken and who is affected.
 

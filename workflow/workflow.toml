@@ -132,6 +132,33 @@ read = ["delivery/AGENT_GUIDE.md", "delivery/templates/BRIEF-template.md", "deli
 first = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/20-analysis/ANALYSIS_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
 refs_from = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
 
+[steps.quick]
+title = "Quick track (bug, hotfix, chore, XS): Brief, Spec and RUN strategy in one session, one approval"
+owner = "agent"
+mode = "developer"
+command = "quick"
+tier = "balanced"
+session = "fresh; stays open for approval and execution"
+read = ["delivery/guide/quick.md", "delivery/templates/BRIEF-template.md", "delivery/templates/SPEC-template.md", "delivery/templates/RUN-template.md"]
+first = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
+refs_from = ["analysis/10-stories/STORY_{ID}_*.md"]
+run = ["python3 tools/context.py --package-rules"]
+
+[steps.spike]
+title = "Spike: time-boxed investigation, findings note and follow-up stories (no code merged)"
+owner = "agent"
+mode = "developer"
+command = "spike"
+tier = "balanced"
+session = "fresh; one spike"
+read = ["delivery/templates/SPIKE-template.md", "reference/project-summary.md", "analysis/10-stories/STORY_{ID}_*.md"]
+refs_from = ["analysis/10-stories/STORY_{ID}_*.md"]
+
+[steps.spike-review]
+title = "Human review of the spike findings (status → Accepted)"
+owner = "human"
+mode = "developer"
+
 [steps.spec-approval]
 title = "Human review of the Spec (status → Ready)"
 owner = "human"
@@ -311,6 +338,20 @@ tier = "balanced"
 mode = "developer"
 body = "Follow `workflow/steps/brief-spec.md` with {ID} = $ARGUMENTS. One story per session."
 
+[commands.quick]
+description = "Developer mode — quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy, then one approval"
+args = "<ID>"
+tier = "balanced"
+mode = "developer"
+body = "Follow `workflow/steps/quick.md` with {ID} = $ARGUMENTS. One story per session."
+
+[commands.spike]
+description = "Developer mode — spike: time-boxed investigation, findings note and follow-up stories; no code merged"
+args = "<ID> [time-box]"
+tier = "balanced"
+mode = "developer"
+body = "Follow `workflow/steps/spike.md` with arguments $ARGUMENTS: the ID is {ID}, the optional time-box overrides the story's."
+
 [commands.spec]
 description = "Developer mode — update an existing Spec (e.g. after human review)"
 args = "<ID> <requested changes>"
@@ -332,7 +373,7 @@ body = """
 Arguments: $ARGUMENTS.
 
 - ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
-- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`.
+- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
 - `revise: …` → update only the strategy (untick `Stopped` in §2, status `Draft`, note the request in §2) and stop again.
 - ID only with an approved strategy → resume following `workflow/steps/execute.md`.
 - `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`).

@@ -21,8 +21,10 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 ```
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
             existing codebase: tools/adopt.py → onboard → backlog → release plan
-ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for stories with skip_analysis = true)
+ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for bug, hotfix, chore, refactor, spike, XS, or skip_analysis = true)
 DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist → review → Closed
+            quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy → one approval → same as above; hotfixes first
+            spike: findings note (human: Accepted) → follow-up stories; no code merged
 ```
 
 The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits, e.g. `PR0101`):
