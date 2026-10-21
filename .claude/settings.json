@@ -20,5 +20,6 @@
       "Read(./.env)",
       "Read(./.env.*)"
     ]
-  }
+  },
+  "model": "sonnet"
 }

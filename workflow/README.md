@@ -29,8 +29,8 @@ Order in delivery: analysis one sprint ahead; development one story at a time, i
 ## Choosing models
 
 - Steps declare a **tier**; `models.toml` maps tier → model per vendor and tool. `/choose-models` walks you through it, `make agents` regenerates the adapters.
-- Which tier each step uses: [`AGENTS.md`](../AGENTS.md) §5 rule 4 (the per-step table is in [`STEPS.md`](STEPS.md)). Ask for deep explicitly on L/XL stories (`/run <ID>` + "use the deep tier").
-- Claude Code and Copilot pin the model per command; Codex and Cursor print the recommended model at the top of the command: switch to it before running.
+- Which tier each step uses: [`AGENTS.md`](../AGENTS.md) §5 rule 4 (the per-step table is in [`STEPS.md`](STEPS.md)). `make next` routes L/XL stories to `/run-deep <ID>` (same procedure, deep tier).
+- Claude Code and Copilot pin the model per command (Claude Code: for that turn only; follow-ups run on the session default, the balanced tier in `.claude/settings.json`, so answer gates with the command, e.g. `/run <ID> approve`); Codex and Cursor print the recommended model at the top of the command: switch to it before running.
 
 ## Token rules
 

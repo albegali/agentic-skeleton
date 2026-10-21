@@ -25,7 +25,8 @@
 <!-- Verifiable data only. -->
 
 ## Observations on the agent-supervised model
-<!-- From real work only: accelerations, rework, supervision effort, external constraints, token/cost signals. -->
+<!-- From real work only: accelerations, rework, supervision effort, external constraints, token/cost signals.
+     Numbers from `tools/usage.py` (cost share per tier, tier mismatches, context peaks, prompts/interrupts/rejections, tokens, cost); say which tools were not counted. -->
 
 ## Points for the steering committee
 <!-- Key messages. -->

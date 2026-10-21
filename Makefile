@@ -1,11 +1,11 @@
 # Workflow targets (stdlib Python >= 3.11, no dependencies). Stack targets read project.toml [stack].
-.PHONY: help next context check backlog agents test-tools setup test lint run portal codex-prompts adopt
+.PHONY: help next context check backlog agents usage test-tools setup test lint run portal codex-prompts adopt
 
 PY ?= python3
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
 
 help:
-	@echo "make next | context STEP=<step> IDS='<ID…>' | check | backlog | agents | test-tools | setup | test | lint | run | adopt TARGET=<repo>"
+	@echo "make next | context STEP=<step> IDS='<ID…>' | check | backlog | agents | usage DAYS=7 | test-tools | setup | test | lint | run | adopt TARGET=<repo>"
 
 next:            ## next workflow step (deterministic)
 	@$(PY) tools/next_step.py
@@ -21,6 +21,9 @@ backlog:         ## regenerate Story files, epic pages, overview from backlog/st
 
 agents:          ## regenerate tool adapters from workflow/ + models.toml
 	@$(PY) tools/render_agents.py
+
+usage:           ## agent sessions, tier share, context peaks and supervision signals from local logs: make usage DAYS=30
+	@$(PY) tools/usage.py --days $(or $(DAYS),7)
 
 test-tools:      ## tests of the workflow tools
 	@$(PY) -m unittest discover -s tools/tests -q

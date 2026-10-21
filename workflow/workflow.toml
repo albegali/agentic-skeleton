@@ -13,6 +13,7 @@
 #   sources   true: add the kickoff sources recorded in project.toml [inception] sources
 #   design    true: point to the existing design in project.toml [inception] design (outline, not the whole file)
 #   package_rules  true: list the package AGENTS.md files with their size (counted in the budget)
+# Steps: deep_command = "<command>" is used instead of `command` (with the deep tier) for L/XL stories.
 #   diff      true: size and --stat of the story branch diff against main (file by file when large)
 # Files passed to a step (workshop minutes, sources): `tools/context.py <step> <IDs> --with <file>`.
 
@@ -175,6 +176,7 @@ mode = "developer"
 command = "run"
 tier = "balanced"
 deep_when = "story size L/XL or new architecture"
+deep_command = "run-deep"    # next_step routes L/XL stories here (deep tier)
 session = "fresh; stays open for approval and execution"
 read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/templates/RUN-template.md", "delivery/guide/run.md"]
 refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
@@ -191,6 +193,7 @@ owner = "agent"
 mode = "developer"
 command = "run"
 tier = "balanced"
+deep_command = "run-deep"
 session = "same as the strategy while the session is under ~80k tokens; otherwise /clear, then /run <ID> (the RUN is the memory)"
 read = ["delivery/30-runs/RUN-{ID}.md", "delivery/20-specs/SPEC-{ID}-*.md"]
 refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
@@ -239,10 +242,10 @@ command = "weekly"
 tier = "fast"
 session = "fresh"
 read = ["project-journal/templates/weekly.md", "project-journal/notes/current-week.md"]
-run = ["git log --since='7 days ago' --oneline", "python3 tools/next_step.py"]
+run = ["git log --since='7 days ago' --format='%h %ad %s' --date=short", "python3 tools/next_step.py", "python3 tools/usage.py --days 7"]
 
 # ================================================================== commands
-# body: the prompt. $ARGUMENTS is replaced with each tool's argument syntax.
+# body: the prompt. $ARGUMENTS is replaced with each tool's argument syntax. body_from = "<command>": reuse that command's body.
 # tools: Claude Code allowed-tools (optional; omitted = default permissions).
 
 [commands.next]
@@ -280,7 +283,7 @@ body = """
 Arguments: $ARGUMENTS
 1. Read `models.toml`. Show a compact table tier × enabled tool with the current model, and mark entries flagged "verify".
 2. Ask the user, one question per tool, which model to use per tier (offer the current value as default; propose the vendor's latest small / mid / large model for fast / balanced / deep). If a web search tool is available, verify the current model names first.
-3. Update `models.toml` (keep comments), run `make agents`, then `make check`.
+3. Update `models.toml` (keep comments), run `make agents`. If the balanced model changed, also set `"model"` in `.claude/settings.json` to it (session default for follow-ups), unless the user wants to keep their own. Then `make check`.
 Chat: the final table, nothing else.
 """
 
@@ -400,8 +403,15 @@ Arguments: $ARGUMENTS.
 - `approve-deviation <n>` → fill `Approved by` (`project.toml` owner) and `Date` of RUN §6 `Deviation #<n>`; if the Spec is not `In Progress` or `Ready`, stop and say what the Spec still needs. Otherwise apply its plan impact to §1 as new steps, RUN `Executing`, Spec `In Progress`, resume following `workflow/steps/execute.md`.
 - `cancel: <reason>` → the owner dropped the story: `status = "cancelled"` on the story in `backlog/stories.toml` (reason in `notes`); RUN (if any) `Cancelled` with the reason in §9 and code changes reverted or listed there; Spec (if any) `Cancelled`; Brief `Superseded`. No new RUN.
 
-Use the deep tier only if the user asked for it or the story is L/XL.
+L/XL stories run through `/run-deep <ID>` (same procedure, deep tier); otherwise use the deep tier only if the user asked for it.
 """
+
+[commands.run-deep]
+description = "Developer mode — /run on the deep tier, for L/XL stories (same arguments and procedure)"
+args = "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
+tier = "deep"
+mode = "developer"
+body_from = "run"
 
 [commands.persist]
 description = "Developer mode — persistence/reconciliation, story PR and CI result (RUN → Persisted; nothing merged)"

@@ -30,4 +30,4 @@ Order: inception (kickoff → requirements → mockup → architecture → backl
 | [`human-gate`](steps/human-gate.md) | human | meta | — | — | — | — | — | — | — |
 | [`weekly`](steps/weekly.md) | agent | journal | /weekly | fast | haiku | gpt-5-mini | Claude Haiku 5.5 | haiku | fresh |
 
-Commands: `/next`, `/choose-models`, `/kickoff`, `/onboard`, `/requirements`, `/mockup`, `/architecture`, `/backlog`, `/release-plan`, `/analysis`, `/refine`, `/brief`, `/quick`, `/spike`, `/spec`, `/run`, `/persist`, `/close`, `/review-story`, `/weekly`.
+Commands: `/next`, `/choose-models`, `/kickoff`, `/onboard`, `/requirements`, `/mockup`, `/architecture`, `/backlog`, `/release-plan`, `/analysis`, `/refine`, `/brief`, `/quick`, `/spike`, `/spec`, `/run`, `/run-deep`, `/persist`, `/close`, `/review-story`, `/weekly`.
