@@ -138,7 +138,7 @@ def set_field(text: str, label: str, value: str, section_rx: str | None = None) 
     """Fill `label:` (optionally `- label:`) in the given section, or the first one in the file."""
     sec = wf.heading_section(text, section_rx) if section_rx else None
     scope = sec if sec is not None else text
-    new = re.sub(rf"^(\s*-?\s*{re.escape(label)}:)[ \t]*$", rf"\g<1> {value}", scope, count=1, flags=re.M)
+    new = re.sub(rf"^(\s*-?\s*{re.escape(label)}:)[ \t]*$", lambda m: f"{m.group(1)} {value}", scope, count=1, flags=re.M)
     return text.replace(scope, new, 1) if sec is not None else new
 
 
@@ -160,8 +160,8 @@ def approve(gate: str, ident: str | None, file: str | None, who: str, when: str)
         if not re.search(r"^\s*-\s*\[[ xX]\]\s*Approved\b", sec, re.M):
             raise ValueError(f"{run}: §2 has no `- [ ] Approved` line")
         new = re.sub(r"^(\s*-\s*)\[ \](\s*Approved\b)", r"\1[x]\2", sec, count=1, flags=re.M)
-        new = re.sub(r"^(Reviewer:)[ \t]*$", rf"\g<1> {who}", new, count=1, flags=re.M)
-        new = re.sub(r"^(Date:)[ \t]*$", rf"\g<1> {when}", new, count=1, flags=re.M)
+        new = re.sub(r"^(Reviewer:)[ \t]*$", lambda m: f"{m.group(1)} {who}", new, count=1, flags=re.M)
+        new = re.sub(r"^(Date:)[ \t]*$", lambda m: f"{m.group(1)} {when}", new, count=1, flags=re.M)
         changed[run] = set_md_status(t.replace(sec, new, 1), "Strategy Approved")
         st = wf.read(spec)
         changed[spec] = set_md_status(st, "In Progress")
@@ -174,8 +174,8 @@ def approve(gate: str, ident: str | None, file: str | None, who: str, when: str)
         if "Tuning accepted by:" not in t:
             t = t.replace("# 5. Tuning Log", "# 5. Tuning Log\n\nTuning accepted by:\nDate:", 1)
         sec = wf.heading_section(t, r"^#\s+5\.") or ""
-        new = re.sub(r"^(Tuning accepted by:)[ \t]*$", rf"\g<1> {who}", sec, count=1, flags=re.M)
-        new = re.sub(r"^(Date:)[ \t]*$", rf"\g<1> {when}", new, count=1, flags=re.M)
+        new = re.sub(r"^(Tuning accepted by:)[ \t]*$", lambda m: f"{m.group(1)} {who}", sec, count=1, flags=re.M)
+        new = re.sub(r"^(Date:)[ \t]*$", lambda m: f"{m.group(1)} {when}", new, count=1, flags=re.M)
         changed[run] = t.replace(sec, new, 1)
     elif gate.startswith("deviation:"):
         n = gate.split(":", 1)[1]
@@ -184,8 +184,8 @@ def approve(gate: str, ident: str | None, file: str | None, who: str, when: str)
         m = re.search(rf"^###\s+Deviation\s+#{re.escape(n)}\b.*?(?=^#{{1,3}}\s|\Z)", t, re.M | re.S)
         if not m:
             raise ValueError(f"{run}: no `### Deviation #{n}`")
-        body = re.sub(r"^(\s*-\s*Approved by:)[ \t]*$", rf"\g<1> {who}", m.group(0), count=1, flags=re.M)
-        body = re.sub(r"^(\s*-\s*Date:)[ \t]*$", rf"\g<1> {when}", body, count=1, flags=re.M)
+        body = re.sub(r"^(\s*-\s*Approved by:)[ \t]*$", lambda m: f"{m.group(1)} {who}", m.group(0), count=1, flags=re.M)
+        body = re.sub(r"^(\s*-\s*Date:)[ \t]*$", lambda m: f"{m.group(1)} {when}", body, count=1, flags=re.M)
         changed[run] = t.replace(m.group(0), body, 1)
     elif gate == "spike":
         note = one(f"delivery/40-spikes/SPIKE-{ident}-*.md")
