@@ -3,16 +3,18 @@
 
 Developer mode — RUN strategy, approval, execution, tuning (same session for the same story)
 
-Arguments: <ID> [approve | revise: … | tuning: …]
+Arguments: <ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]
 
 > Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Arguments: <the text typed after the command>.
 
 - ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
-- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, then follow `workflow/steps/execute.md`.
-- `revise: …` → update only the strategy and stop again.
+- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`.
+- `revise: …` → update only the strategy (untick `Stopped` in §2, status `Draft`, note the request in §2) and stop again.
 - ID only with an approved strategy → resume following `workflow/steps/execute.md`.
 - `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`).
+- `approve-deviation <n>` → fill `Approved by` (`project.toml` owner) and `Date` of RUN §6 `Deviation #<n>`; if the Spec is not `In Progress` or `Ready`, stop and say what the Spec still needs. Otherwise apply its plan impact to §1 as new steps, RUN `Executing`, Spec `In Progress`, resume following `workflow/steps/execute.md`.
+- `cancel: <reason>` → the owner dropped the story: `status = "cancelled"` on the story in `backlog/stories.toml` (reason in `notes`); RUN (if any) `Cancelled` with the reason in §9 and code changes reverted or listed there; Spec (if any) `Cancelled`; Brief `Superseded`. No new RUN.
 
 Use the deep tier only if the user asked for it or the story is L/XL.

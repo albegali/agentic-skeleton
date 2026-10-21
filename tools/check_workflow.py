@@ -2,12 +2,12 @@
 """Deterministic consistency check of the workflow (review mode helper). Exit 1 on errors.
 
 Inception: unique FR/NFR IDs; ADR numbering; mockup map cites existing FRs.
-Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist; deps exist and are acyclic; FR/NFR links exist;
-           Must FRs covered. PLAN.md ↔ backlog: unknown IDs/epics, unplanned or twice-planned stories, a dependency planned
+Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist; deps, supersedes, split_from exist and deps
+           are acyclic; FR/NFR links exist; Must FRs covered; superseded story without successor, dependency on a cancelled story. PLAN.md ↔ backlog: unknown IDs/epics, unplanned or twice-planned stories, a dependency planned
            after its dependant, sprint capacity (frontmatter `capacity:`), Must stories planned after their release target,
            sprints past their end date with open stories.
 Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution;
-           Persistence (§7) before Closed; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template
+           Persistence (§7) before Closed; Blocked RUN without an open §6 deviation; RUN still open on a cancelled story; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template
            placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
@@ -105,6 +105,15 @@ def check_backlog(fr: set[str], nfr: set[str], prio: dict[str, str]) -> None:
         for d in s.get("deps", []):
             if d not in known:
                 E.append(f"{i}: unknown dependency {d}")
+        for k in wf.STORY_LINKS:
+            if k in s and s[k] not in known:
+                E.append(f"{i}: `{k}` names unknown story {s[k]}")
+        if s.get("status") == "superseded" and not any(i in (x.get("supersedes"), x.get("split_from")) for x in st):
+            W.append(f"{i}: superseded, but no story has `supersedes` or `split_from` = \"{i}\"")
+        if s.get("status") in (None, "open"):
+            for d in s.get("deps", []):
+                if next((x for x in st if x["id"] == d), {}).get("status") == "cancelled":
+                    W.append(f"{i}: depends on cancelled story {d}: drop the dependency or cancel {i}")
         if fr:
             for x in s.get("fr", []):
                 if x not in fr:
@@ -270,6 +279,7 @@ def check_chain() -> None:
                     E.append(f"SPEC-{i} Done with unchecked {sec}: {'; '.join(left)}")
         if s and s != "Draft":
             check_placeholders(f"SPEC-{i}", t)
+    stories = {} if wf.backlog_errors() else wf.stories()
     for p in wf.matches("delivery/30-runs/RUN-*.md"):
         t = wf.read(p)
         m = re.match(rf"RUN-({idrx})", os.path.basename(p))
@@ -283,8 +293,12 @@ def check_chain() -> None:
             E.append(f"RUN-{i}: SPEC-{i} missing")
         if "# 1. Execution Strategy" not in t:
             E.append(f"RUN-{i}: Execution Strategy missing")
-        if s and s != "Draft" and not wf.run_approved(t):
+        if s and s not in ("Draft", "Stopped", "Cancelled") and not wf.run_approved(t):
             E.append(f"RUN-{i}: status {s} without recorded approval (§2)")
+        if s == "Blocked" and not wf.open_deviations(t):
+            W.append(f"RUN-{i}: Blocked without a §6 deviation awaiting approval (`Scope impact: Requires approval`)")
+        if s not in ("Closed", "Cancelled") and (gone := stories.get(i, {}).get("status")) in ("cancelled", "superseded"):
+            W.append(f"RUN-{i}: story {gone} but RUN {s or 'Draft'}: set the RUN to Cancelled")
         if s == "Closed" and not re.search(r"^\s*-\s*\[[xX]\]", wf.heading_section(t, r"^#\s+7\.") or "", re.M):
             E.append(f"RUN-{i}: Closed without Persistence")
         if s == "Closed" and (left := unchecked(t, r"^#\s+8\.")):

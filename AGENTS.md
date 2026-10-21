@@ -21,7 +21,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 ```
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
             existing codebase: tools/adopt.py → onboard → backlog → release plan
-ANALYSIS    Story → Analysis → workshop (human) → Refined Story
+ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for stories with skip_analysis = true)
 DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist → review → Closed
 ```
 

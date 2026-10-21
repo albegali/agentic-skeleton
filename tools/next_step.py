@@ -78,6 +78,12 @@ def bad_status(path: str, kind: str, raw: str) -> tuple[str, str, str]:
 
 def stage(i: str) -> tuple[str, str, str]:
     """(stage, detail, owner) — owner: agent | human | done."""
+    story = wf.stories().get(i, {})
+    if story.get("status") == "cancelled":
+        return ("done", "story cancelled", "done")
+    if story.get("status") == "superseded":
+        by = [k for k, s in wf.stories().items() if i in (s.get("supersedes"), s.get("split_from"))]
+        return ("done", f"story superseded{' by ' + ', '.join(by) if by else ''}", "done")
     analysis, refined, brief, spec, run = (wf.find(k, i) for k in ("analysis", "refined", "brief", "spec", "run"))
     if run:
         t = wf.read(run)
@@ -88,6 +94,23 @@ def stage(i: str) -> tuple[str, str, str]:
         approved = wf.run_approved(t)
         if st == "Closed":
             return ("done", "RUN closed", "done")
+        if st == "Cancelled":
+            return ("done", "RUN cancelled", "done")
+        if spec:  # a Spec changed or blocked after the RUN started stops the RUN until a human acts
+            sraw = wf.md_status(wf.read(spec)) or "Draft"
+            sst = wf.status("spec", sraw)
+            if not sst:
+                return bad_status(spec, "spec", sraw)
+            if sst == "Draft" and approved:
+                return ("spec-approval", "Spec changed after the RUN approval: review it, status → Ready", "human")
+            if sst == "Blocked":
+                return ("blocked", "Spec blocked: unblock it (decision, dependency), status → Ready", "human")
+        if st == "Blocked":
+            dev = wf.open_deviations(t)
+            return ("blocked", f"RUN blocked: approve deviation #{dev[0]} (RUN §6) with /run {i} approve-deviation {dev[0]}"
+                    if dev else "RUN blocked: record the stop condition as a RUN §6 deviation, or resolve it", "human")
+        if st == "Stopped" or (st == "Draft" and not approved and wf.run_stopped(t)):
+            return ("stopped", f"RUN stopped by you: /run {i} revise: … to resume, or /run {i} cancel: … to drop the story", "human")
         if st == "Persisted":
             return ("review", "RUN persisted: review and closure", "agent")
         if st == "Tuning":
@@ -108,6 +131,8 @@ def stage(i: str) -> tuple[str, str, str]:
             return ("spec-approval", "Spec draft: human review, status → Ready", "human")
         if st == "Blocked":
             return ("blocked", "Spec blocked", "human")
+        if st == "Cancelled":
+            return ("done", "Spec cancelled", "done")
         return ("run-strategy", f"Spec {st}, RUN missing", "agent")
     if brief:
         return ("brief-spec", "Brief present, Spec missing", "agent")
@@ -128,6 +153,8 @@ def stage(i: str) -> tuple[str, str, str]:
         if not st:
             return bad_status(analysis, "analysis", raw)
         return ("workshop", f"Analysis {st}: workshop needed, then the Refined Story with its evidence", "human")
+    if story.get("skip_analysis"):
+        return ("brief-spec", "no artifact yet; analysis skipped (skip_analysis = true)", "agent")
     return ("analysis", "no artifact yet", "agent")
 
 
@@ -203,6 +230,10 @@ def step_info(step: str) -> dict:
 
 def command_for(step: str, ids: list[str]) -> str:
     s = step_info(step)
+    if step == "done":
+        return "nothing: the story is finished"
+    if not s:  # per-story human stages (blocked, stopped) are explained in the human-gate table
+        return "human action (see workflow/steps/human-gate.md)"
     if s.get("owner") == "human" or not s.get("command"):
         return "human action (see workflow/steps/%s.md)" % step
     return f"/{s['command']}" + (" " + " ".join(ids) if ids else "")
