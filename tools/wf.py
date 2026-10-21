@@ -335,11 +335,12 @@ def run_review(text: str) -> dict | None:
 
 
 def strategy_written(text: str) -> bool:
-    """RUN §1 has a plan: a `- Step 1` line under `### Plan` that is not the template placeholder, or `Strategy ready: yes`."""
+    """RUN §1 has a plan: a first step under `### Plan` (`- TSK-<ID>-01: …`, or `- Step 1` before 1.11) that is not the
+    template placeholder, or `Strategy ready: yes`."""
     if re.search(r"^\s*Strategy ready:\s*yes\b", text, re.M | re.I):
         return True
     plan = heading_section(text, r"^###\s+Plan\b") or ""
-    m = re.search(r"^\s*-\s*Step 1\b(.*)$", plan, re.M)
+    m = re.search(r"^\s*-\s*(?:Step 1\b|TSK-[A-Za-z]+\d{4}-\d+\b)(.*)$", plan, re.M)
     return bool(m) and bool(re.sub(r"\([^)]*\)", "", m.group(1)).strip(" :.…"))  # `- Step 1 (TSK-01): …` is still empty
 
 

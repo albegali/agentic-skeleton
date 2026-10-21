@@ -646,6 +646,9 @@ class EdgeCaseTest(unittest.TestCase):
         for plan, want in (("…", "run-strategy"), ("(TSK-01): …", "run-strategy"), ("(TSK-01): build the API", "run-approval")):
             r.write(run, RUN.format(i=i, st="Draft", plan=plan, ok=" ").replace("- Step 1: (", "- Step 1 ("))
             self.assertEqual(r.next(i)["step"], want, plan)
+        for plan, want in (("- TSK-DM0101-01: …", "run-strategy"), ("- TSK-DM0101-01: build the API", "run-approval")):  # 1.11 template
+            r.write(run, RUN.format(i=i, st="Draft", plan="x", ok=" ").replace("- Step 1: x", plan))
+            self.assertEqual(r.next(i)["step"], want, plan)
         r.write(run, RUN.format(i=i, st="Draft", plan="…", ok=" ") + "\nStrategy ready: yes\n")
         self.assertEqual(r.next(i)["step"], "run-approval")
         r.write(run, RUN.format(i=i, st="Draft", plan="build", ok="X"))
