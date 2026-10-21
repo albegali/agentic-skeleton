@@ -1174,6 +1174,56 @@ class SecurityTest(unittest.TestCase):
         self.assertNotIn("failing gates", r.run("tools/check_workflow.py").stdout)
 
 
+class TeamTest(unittest.TestCase):
+    """Team use: claims, the per-person next step, worktrees."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('deps = ["DM0101"]', "deps = []"))
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md", REFINED_MD)
+        r.write("analysis/30-refined/REFINED_DM0102_export.md", REFINED_MD)
+        for a in (("init", "-q", "-b", "main"), ("config", "user.name", "Ada"), ("config", "user.email", "ada@example.org"),
+                  ("add", "-A"), ("commit", "-qm", "base")):
+            self.git(*a)
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def git(self, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
+
+    def test_claim_creates_the_branch_and_others_skip_the_story(self):
+        r = self.r
+        out = r.run("tools/claim.py", "dm0101").stdout
+        self.assertIn("DM0101 claimed by Ada on branch dm0101-walking-skeleton", out)
+        self.assertEqual(self.git("branch", "--show-current").strip(), "dm0101-walking-skeleton")
+        self.assertIn('id = "DM0101"\nclaimed_by = "Ada"\nclaimed_at = "', r.read("backlog/stories.toml"))
+        self.assertEqual(self.git("log", "-1", "--format=%s").strip(), "claim(DM0101): Ada")
+        r.run("tools/check_workflow.py")
+        n = r.next("--me", "Bob")
+        self.assertEqual((n["step"], n["ids"], n["claimable"]), ("brief-spec", ["DM0102"], ["DM0102"]))
+        self.assertEqual(r.next("--me", "ada")["ids"], ["DM0101"])  # names compare case-insensitively
+        self.assertIn("is claimed by Ada", r.run("tools/claim.py", "DM0101", "--me", "Bob", ok=False).stderr)
+        self.git("switch", "-q", "main")
+        self.git("branch", "dm0101-other-try")
+        r.write("backlog/stories.toml", r.read("backlog/stories.toml").replace('id = "DM0101"\n', 'id = "DM0101"\nclaimed_by = "Ada"\n', 1))
+        warnings = json.loads(r.run("tools/check_workflow.py", "--json").stdout)["data"]["issues"]
+        self.assertIn("DM0101: claimed twice, on branches dm0101-other-try, dm0101-walking-skeleton (Ada)", [w["message"] for w in warnings])
+
+    def test_worktree_claim_leaves_the_current_checkout_alone(self):
+        r = self.r
+        out = r.run("tools/claim.py", "DM0102", "--worktree").stdout
+        wt = os.path.join(os.path.dirname(r.dir), os.path.basename(r.dir) + "-dm0102")
+        self.addCleanup(shutil.rmtree, wt, True)
+        self.assertIn(f"in worktree {wt}", out)
+        self.assertEqual(self.git("branch", "--show-current").strip(), "main")
+        with open(os.path.join(wt, "backlog/stories.toml"), encoding="utf-8") as f:
+            self.assertIn('claimed_by = "Ada"', f.read())
+        self.assertEqual(r.next("--me", "Bob")["claimable"], ["DM0101"])
+
+
 class LaunchTest(unittest.TestCase):
     def setUp(self) -> None:
         self.r = Repo()

@@ -31,6 +31,7 @@ notes = ""
 out_of_scope = "Domain features."
 # Optional:
 # status = "open"           # open | cancelled | superseded  (cancelled / superseded count as done in the plan)
+# claimed_by = "Ada"        # team use: set by `make claim` on the story branch (with claimed_at = "YYYY-MM-DD")
 # security = true           # security review step before /review-story (default: detected from Security/Privacy NFRs and the Spec)
 # skip_analysis = true      # straight to /brief, no Analysis or workshop (default: true for bug, hotfix, chore, refactor, spike, XS)
 # supersedes = "PR0102"     # replaces that story (a closed one: post-closure change; an open one: set it superseded)

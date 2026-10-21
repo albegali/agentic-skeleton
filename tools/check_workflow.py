@@ -81,7 +81,7 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
     q = wf.project().get("gates", {})
     if not isinstance(q.get("coverage_min", 0), (int, float)) or not 0 <= q.get("coverage_min", 0) <= 100:
         E.append("project.toml [gates] coverage_min must be a number between 0 and 100")
-    for key, allowed in (("merge", ("squash", "merge", "rebase")), ("trailers", ("none", "tool"))):
+    for key, allowed in (("merge", ("squash", "merge", "rebase")), ("trailers", ("none", "agent", "tool"))):
         if key in g and g[key] not in allowed:
             E.append(f"project.toml [git] {key} = {g[key]!r}: expected one of {', '.join(allowed)}")
     mref = "reference/product/mockup-reference.md"
@@ -372,6 +372,36 @@ def check_chain() -> None:
             check_placeholders(f"RUN-{i}", t)
 
 
+STALE_CLAIM_DAYS = 14
+
+
+def check_claims() -> None:
+    """Team use: a story on two branches, stale claims (no RUN after 14 days), more than one open story per person."""
+    import datetime as dt
+    import next_step
+    if wf.backlog_errors():
+        return  # reported by the backlog check
+    cl = wf.claims()
+    per: dict[str, list[str]] = {}
+    for i, c in cl.items():
+        authors = {b["author"] for b in c["branches"]} - {""}
+        if len({b["branch"] for b in c["branches"]}) > 1:
+            W.append(f"{i}: claimed twice, on branches {', '.join(sorted({b['branch'] for b in c['branches']}))} ({', '.join(sorted(authors))})")
+        if next_step.stage(i)[0] == "done":
+            continue
+        per.setdefault(c["by"].lower(), []).append(i)
+        try:
+            since = dt.date.fromisoformat(c["at"]) if c["at"] else None
+        except ValueError:
+            E.append(f"{i}: claimed_at {c['at']!r} is not a date (YYYY-MM-DD)")
+            continue
+        if since and (dt.date.today() - since).days > STALE_CLAIM_DAYS and not wf.matches(f"delivery/30-runs/RUN-{i}*.md"):
+            W.append(f"{i}: claimed by {c['by']} on {since}, no RUN yet: stale claim? (release it or continue)")
+    for who, ids in per.items():
+        if len(ids) > 1:
+            W.append(f"{who} has {len(ids)} open stories claimed ({', '.join(ids)}): one at a time per person")
+
+
 def check_spec_index() -> None:
     import gen_backlog
     if wf.matches("delivery/20-specs/SPEC-*.md") and (not wf.exists(gen_backlog.SPEC_INDEX) or wf.read(gen_backlog.SPEC_INDEX) != gen_backlog.spec_index()):
@@ -459,7 +489,7 @@ def main() -> None:
 
     fr, nfr, prio = check_inception()
     tag("inception", 0, 0)
-    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index)]
+    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index), ("backlog", check_claims)]
     steps += [("chain", check_revisions), ("chain", check_approval_order)] if "--git" in sys.argv else []
     for area, fn in steps + [("adapters", check_adapters)]:
         ne, nw = len(E), len(W)

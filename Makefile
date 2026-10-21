@@ -1,5 +1,5 @@
 # Workflow targets (stdlib Python >= 3.11, no dependencies). Stack targets read project.toml [stack].
-.PHONY: help next context check backlog agents usage approve gates secrets hooks test-tools setup test lint run portal adopt
+.PHONY: help next context check backlog agents usage approve claim gates secrets hooks test-tools setup test lint run portal adopt
 
 PY ?= python3
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
@@ -24,6 +24,9 @@ agents:          ## regenerate tool adapters from workflow/ + models.toml
 
 approve:         ## YOU pass a human gate, committed alone with Approved-by/at: GATE=spec|strategy|tuning|deviation:<n>|spike|refined ID=<ID> · GATE=inception FILE=<file> · GATE=stack
 	@$(PY) tools/approve.py --gate "$(GATE)" $(if $(ID),--id "$(ID)") $(if $(FILE),--file "$(FILE)")
+
+claim:           ## team use: claim a story (branch, claim in stories.toml, push): make claim ID=PR0101 [WORKTREE=1] [ME="name"]
+	@$(PY) tools/claim.py "$(ID)" $(if $(WORKTREE),--worktree) $(if $(ME),--me "$(ME)")
 
 gates:           ## quality gates of project.toml [gates] + [stack] test/lint, written into RUN §8: make gates ID=PR0101
 	@$(PY) tools/quality_gates.py "$(ID)"
