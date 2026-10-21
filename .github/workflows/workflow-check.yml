@@ -24,6 +24,16 @@ jobs:
       - run: make check
       - run: python tools/check_workflow.py --git
       - run: make test-tools
+  secrets:  # code and workflow artifacts alike; gitleaks plus the stdlib scanner the pre-commit hook uses
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: python3 tools/secret_scan.py
   other-os:  # all tools tests on the other OSes (NFR-10; Linux is covered above): paths, console encoding, launcher
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15

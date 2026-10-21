@@ -21,6 +21,15 @@ design = ""                  # existing design or prototype: /mockup maps it ins
 merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
 trailers = "none"            # attribution lines agents add to commits and PR bodies: none (no co-author / "generated with" lines) | tool (the tool's default)
 
+[gates]
+# Quality gates run by `make gates ID=<ID>` at /persist; results go into RUN §8 `### Gates` and `make check` refuses to
+# close a RUN with a failing one. test and lint come from [stack]. Empty command = gate not used.
+typecheck = ""
+coverage = ""                # command whose output ends with the total coverage percentage
+coverage_min = 0             # percent; 0 = any value passes
+secrets = true               # tools/secret_scan.py on the story's files
+mutation = ""                # optional, slow
+
 [portal]
 # Agentic portal, started by `make portal` (tools/portal.py). Uncomment to pin a release:
 # version = "x.y.z"

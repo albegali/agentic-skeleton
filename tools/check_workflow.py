@@ -26,6 +26,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+import quality_gates  # noqa: E402
 import render_agents  # noqa: E402
 import wf  # noqa: E402
 
@@ -77,6 +78,9 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
         if not wf.exists(src):
             W.append(f"project.toml [inception] source not found: {src}")
     g = wf.project().get("git", {})
+    q = wf.project().get("gates", {})
+    if not isinstance(q.get("coverage_min", 0), (int, float)) or not 0 <= q.get("coverage_min", 0) <= 100:
+        E.append("project.toml [gates] coverage_min must be a number between 0 and 100")
     for key, allowed in (("merge", ("squash", "merge", "rebase")), ("trailers", ("none", "tool"))):
         if key in g and g[key] not in allowed:
             E.append(f"project.toml [git] {key} = {g[key]!r}: expected one of {', '.join(allowed)}")
@@ -355,6 +359,12 @@ def check_chain() -> None:
                     E.append(f"RUN-{i}: Closed without the `{fact}:` fact in §8")
                 elif re.search(r"→\s*fail\b", v.group(1), re.I):
                     E.append(f"RUN-{i}: Closed with failing tests in §8: {v.group(1).strip()}")
+        if s == "Closed":
+            gl = wf.heading_section(t, r"^###\s+Gates\b")
+            if gl and (failing := re.findall(r"^\s*-\s*(\w+):.*→\s*fail\b", gl, re.M)):
+                E.append(f"RUN-{i}: Closed with failing gates (§8 Gates): {', '.join(failing)}")
+            elif gl is None and "- Tests:" in t and quality_gates.configured():  # RUNs from the 1.11 template on
+                W.append(f"RUN-{i}: Closed without `make gates` results (§8 Gates) although gates are configured")
         acc = re.search(r"^Tuning accepted by:[ \t]*(.*)$", t, re.M)
         if s in ("Persisted", "Reviewed", "Closed") and acc and not acc.group(1).strip():
             W.append(f"RUN-{i}: {s} without `Tuning accepted by` (§5): record who accepted the result and when")

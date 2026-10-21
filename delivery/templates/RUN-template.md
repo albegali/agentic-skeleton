@@ -153,6 +153,13 @@ Facts, not ticks (`make check` reads them):
 - Out-of-scope changes: none / <files and why>
 - CI: green / red / none (no remote) — <PR URL>
 
+### Security review
+> Only for security-sensitive stories, written by `/security-review` (`workflow/steps/security.md`); delete otherwise.
+- Date:
+- Reviewer:
+- Outcome: `ok` / `changes-requested`
+- Findings:
+
 ---
 
 # 9. Outcome

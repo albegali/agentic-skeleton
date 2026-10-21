@@ -204,6 +204,19 @@ title = "Human verification, tuning within scope, persistence"
 owner = "human"
 mode = "developer"
 
+[steps.security]
+title = "Security review of a security-sensitive story (RUN §8 Security review), before the independent review"
+owner = "agent"
+mode = "review"
+command = "security-review"
+tier = "balanced"
+session = "fresh"
+read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/30-runs/RUN-{ID}.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
+diff = true
+run = ["python3 tools/secret_scan.py --branch"]
+
 [steps.review]
 title = "Independent review before closure (RUN §11: Reviewed, or back to Tuning)"
 owner = "agent"
@@ -422,7 +435,7 @@ body = """
 Developer mode, ID $ARGUMENTS (`delivery/AGENT_GUIDE.md` §5, step 7).
 1. Update the Spec (§11) and only the `reference/` docs touched by the story.
 2. RUN: §5 `Tuning accepted by` (the human who ran `/persist`, from `project.toml` owner unless they said otherwise) and `Date`; §7-10 (§8 as facts: AC n/n, `Tests:` command → result, out-of-scope changes, `CI:`); status `Persisted` (not `Closed`: review and `/close` follow). Spec §11 facts and status `Done`. Tasks split off into new stories (`split_from`) are listed under §9 Tasks deferred with the new ID.
-3. `make backlog` (Spec index), then `make check`.
+3. `make gates ID=$ARGUMENTS` (writes RUN §8 `### Gates`; a failing gate → stop, RUN stays `Tuning`), `make backlog` (Spec index), then `make check`.
 4. Git: the `/persist` part of `delivery/guide/git.md` — commit, push the story branch, open its PR (RUN References `Branch`, `PR`), wait for the required checks, record `CI:` in RUN §8 and push it. Merge nothing.
 Chat: outcome in 3 lines, then `/review-story <ID>` in a fresh session.
 """
@@ -433,6 +446,13 @@ args = "<ID>"
 tier = "fast"
 mode = "developer"
 body = "Follow `workflow/steps/close.md` with {ID} = $ARGUMENTS."
+
+[commands.security-review]
+description = "Review mode — security review of a security-sensitive story before /review-story; records the outcome in RUN §8"
+args = "<ID>"
+tier = "balanced"
+mode = "review"
+body = "Follow `workflow/steps/security.md` with {ID} = $ARGUMENTS."
 
 [commands.review-story]
 description = "Review mode — independent review of one story before closure; records the outcome in RUN §11"

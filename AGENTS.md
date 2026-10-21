@@ -22,7 +22,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 INCEPTION   kickoff → requirements → [mockup] → architecture → backlog → release plan   (each approved by a human)
             existing codebase: tools/adopt.py → onboard → backlog → release plan
 ANALYSIS    Story → Analysis → workshop (human) → Refined Story   (skipped for bug, hotfix, chore, refactor, spike, XS, or skip_analysis = true)
-DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist (PR, CI) → review → close (merge)
+DELIVERY    Brief → Spec (human: Ready) → RUN strategy (human: approve) → execute → tuning (human) → persist (gates, PR, CI) → [security review] → review → close (merge)
             quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy → one approval → same as above; hotfixes first
             spike: findings note (human: Accepted) → follow-up stories; no code merged
 ```

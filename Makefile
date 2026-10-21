@@ -1,5 +1,5 @@
 # Workflow targets (stdlib Python >= 3.11, no dependencies). Stack targets read project.toml [stack].
-.PHONY: help next context check backlog agents usage approve test-tools setup test lint run portal adopt
+.PHONY: help next context check backlog agents usage approve gates secrets hooks test-tools setup test lint run portal adopt
 
 PY ?= python3
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
@@ -24,6 +24,15 @@ agents:          ## regenerate tool adapters from workflow/ + models.toml
 
 approve:         ## YOU pass a human gate, committed alone with Approved-by/at: GATE=spec|strategy|tuning|deviation:<n>|spike|refined ID=<ID> · GATE=inception FILE=<file> · GATE=stack
 	@$(PY) tools/approve.py --gate "$(GATE)" $(if $(ID),--id "$(ID)") $(if $(FILE),--file "$(FILE)")
+
+gates:           ## quality gates of project.toml [gates] + [stack] test/lint, written into RUN §8: make gates ID=PR0101
+	@$(PY) tools/quality_gates.py "$(ID)"
+
+secrets:         ## secret scan of the repository (code and artifacts); make secrets ARGS=--branch
+	@$(PY) tools/secret_scan.py $(ARGS)
+
+hooks:           ## install the git pre-commit hook: secret scan of the staged content (gitleaks too, when installed)
+	@printf '#!/bin/sh\n# installed by make hooks\n%s tools/secret_scan.py --staged || exit 1\nif command -v gitleaks >/dev/null 2>&1; then gitleaks protect --staged --no-banner || exit 1; fi\n' "$(PY)" > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo "pre-commit hook installed"
 
 usage:           ## agent sessions, tier share, context peaks and supervision signals from local logs: make usage DAYS=30
 	@$(PY) tools/usage.py --days $(or $(DAYS),7)

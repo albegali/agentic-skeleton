@@ -115,6 +115,8 @@ def stage(i: str) -> tuple[str, str, str]:
         if st == "Stopped" or (st == "Draft" and not approved and wf.run_stopped(t)):
             return ("stopped", f"RUN stopped by you: /run {i} revise: … to resume, or /run {i} cancel: … to drop the story", "human")
         if st == "Persisted":
+            if (why := wf.security_sensitive(i)) and wf.security_review(t) != "ok":
+                return ("security", f"security-sensitive ({why}): security review before the independent review (RUN §8)", "agent")
             return ("review", "RUN persisted: independent review (RUN §11)", "agent")
         if st == "Reviewed":
             rv = wf.run_review(t)
@@ -123,6 +125,8 @@ def stage(i: str) -> tuple[str, str, str]:
             return ("close", f"review #{rv['n']} ok-to-close: close the story and merge its PR", "agent")
         if st == "Tuning":
             rv = wf.run_review(t)
+            if wf.security_review(t) == "changes-requested" and not (rv and rv["outcome"] == "changes-requested"):
+                return ("tuning", f"the security review requested changes (RUN §8): /run {i} tuning: …, then /persist {i}", "human")
             if rv and rv["outcome"] == "changes-requested":
                 return ("tuning", f"review #{rv['n']} requested changes (RUN §11): /run {i} tuning: …, then /persist {i}", "human")
             return ("tuning", "human verification / in-scope tuning, then persistence", "human")
