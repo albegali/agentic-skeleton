@@ -555,7 +555,7 @@ class LaunchTest(unittest.TestCase):
                      "print('app listening', flush=True)\ns.handle_request()\nprint('app served one request', flush=True)\n")
         self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" serve_once.py')
         self.r.toml_set("project.toml", "stack", "url", f"http://127.0.0.1:{port}/")
-        out = self.r.run("tools/launch.py", "--timeout", "20", timeout=60)  # the app never answering must fail, not hang
+        out = self.r.run("tools/launch.py", "--timeout", "120", timeout=180)  # a cold macOS runner needs >20 s to start python; never hang
         self.assertIn(f"http://127.0.0.1:{port}/", out.stdout)
 
     def test_returns_the_app_exit_code(self):
