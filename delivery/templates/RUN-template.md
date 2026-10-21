@@ -7,6 +7,8 @@
   - Fill only when execution starts after human approval, immediately before the first code or test change.
 - Completed at (datetime):
   - Fill at `/close`, after the review.
+- Branch:            (created before the first change: `delivery/guide/git.md`)
+- PR:                (`/persist`)
 
 ---
 
@@ -30,9 +32,9 @@ Draft → Strategy Approved → Executing → Tuning → Persisted → Reviewed 
 - [ ] `delivery/templates/RUN-template.md`
 
 ### Plan
-- Step 1: …
-- Step 2: …
-- Step 3: …
+> One step per Spec task, by ID; only the approach, never the task text again.
+- TSK-<ID>-01: …
+- TSK-<ID>-02: …
 
 ### Assumptions
 - …
@@ -101,7 +103,10 @@ If FAIL → move to Tuning.
 
 # 5. Tuning Log (If needed)
 
-> Only within scope.
+> Only within scope. The acceptance is the human's: fill it when they run `/persist` (or say the result is accepted).
+
+Tuning accepted by:
+Date:
 
 ### Entry #1
 - Issue:
@@ -131,7 +136,7 @@ If FAIL → move to Tuning.
 # 7. Persistence / Reconciliation
 
 - [ ] Spec updated (if needed)
-- [ ] Specs updated (if needed)
+- [ ] Reference docs updated (if needed)
 - [ ] Acceptance Criteria aligned
 
 Summary:
@@ -141,12 +146,12 @@ Summary:
 
 # 8. Quality Gates Check
 
-- [ ] Acceptance criteria satisfied
-- [ ] Tests passing
-- [ ] No scope creep
-- [ ] Persistence completed
+Facts, not ticks (`make check` reads them):
 
-CI: green / red / none (no remote) — <PR URL>
+- AC: n/n met (Spec §4; the tests named there)
+- Tests: <command> → pass / fail (counts)
+- Out-of-scope changes: none / <files and why>
+- CI: green / red / none (no remote) — <PR URL>
 
 ---
 

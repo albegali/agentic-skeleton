@@ -19,7 +19,7 @@ artifact_type: analysis
 us_id: STORY_<ID>
 title: <Short title>
 roadmap_phase: <R1 | R2 | … | unknown>
-status: draft | analyzed | workshop-ready | updated
+status: draft | workshop-ready
 source_files:
   - analysis/10-stories/STORY_<ID>_<short_title>.md
   - reference/project-summary.md
@@ -33,21 +33,11 @@ last_updated: YYYY-MM-DD
 
 ## 1. References
 
-- ID:
-- Source story:
-- Roadmap phase:
-- Sources used:
-- Missing sources:
+- Missing sources: <none, or what was not available>
 
 ## 2. Original User Story
 
-### Story text
-
-<Original text>
-
-### Description
-
-<Original description, if any>
+See `analysis/10-stories/STORY_<ID>_<short_title>.md` (not copied). Note here only where the analysis reads it differently.
 
 ## 3. Intent Understanding
 
@@ -122,4 +112,10 @@ Each point carries the analyst's proposal, consistent with the cited ADRs and co
 - High-impact functional points answered by the PO / stakeholder
 - Technical proposals accepted or overridden by the team (unchallenged proposals stand)
 - Residual assumptions explicitly documented
+
+---
+
+## Revisions
+
+> One line per change after `workshop-ready`: date, what, source.
 ```

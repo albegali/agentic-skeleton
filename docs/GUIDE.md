@@ -334,8 +334,8 @@ You can list story IDs or whole epics (`EP-02`). The order inside a sprint is th
 | Step | Who | Command | Output |
 |---|---|---|---|
 | Analysis | agent (analyst) | `/analysis CP0101 CP0102` (at most 4 related stories) | `analysis/20-analysis/ANALYSIS_*.md`: functional analysis plus workshop questions ranked by impact |
-| Workshop | **you + team** | — | minutes in `project-journal/notes/YYYY-MM-DD-workshop-<topic>.md` |
-| Refined Story | agent (analyst) | `/refine CP0101 CP0102 project-journal/notes/2026-11-05-workshop-auth.md` | `analysis/30-refined/REFINED_*.md`: scope, confirmed AC, decisions, handoff notes, outcome |
+| Workshop | **you + team** | — | minutes in `analysis/workshops/WORKSHOP_<date>_<IDs>.md` (template `analysis/templates/WORKSHOP-template.md`) |
+| Refined Story | agent (analyst) | `/refine CP0101 CP0102 analysis/workshops/WORKSHOP_2026-11-05_CP0101-CP0102.md` | `analysis/30-refined/REFINED_*.md`: scope, confirmed AC, decisions, handoff notes, outcome |
 
 The Analysis chat reply lists only the high-impact questions: that is your workshop agenda. The Refined Story outcome is one of *ready*, *ready with open points* or *not ready*; "not ready" sends the story back to the workshop.
 

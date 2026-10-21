@@ -36,9 +36,7 @@ What the customer appears to want.
 
 ---
 
-# 3. Impact (Required for Bug and Hotfix)
-
-Describe what is broken and who is affected.
+# 3. Impact (Bug and Hotfix only: delete this section for other types)
 
 - Users impacted:
 - System behavior:
@@ -72,9 +70,6 @@ High-level direction of the fix, if known.
 
 # 8. Clarifications / Addenda
 
-> Do not rewrite the original intent after capture.  
-> Add clarifications here.
-
 ### Addendum - YYYY-MM-DD
 
 - Source:
@@ -87,3 +82,9 @@ High-level direction of the fix, if known.
 
 - Spec: SPEC-<ID>
 - RUN: RUN-<ID>
+
+---
+
+## Revisions
+
+> One line per change after approval or closure: date, what, source (minutes, owner decision, commit).

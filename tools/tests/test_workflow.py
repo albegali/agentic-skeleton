@@ -712,6 +712,35 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertIn("RUN-DM0101: Closed with unchecked quality gates: No scope creep", errors)
         self.assertIn("RUN-DM0101: Closed without Persistence", errors)  # the [x] in §9 does not count for §7
 
+    def test_traceability_facts_and_spec_index(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        spec = ("# SPEC-{i} - Walking skeleton\n## References\n- Brief: BRIEF-{i}\n- Requirements: {req}\n## Status\nDone\n"
+                "# 4. Acceptance Criteria\n- [x] AC1: works → test: tests/test_app.py::test_works\n- [x] AC2: fast\n")
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", spec.format(i=i, req="FR-1, NFR-01, FR-28"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        facts = "# 8. Quality Gates Check\n- AC: 2/2 met\n- Tests: {tests}\n- Out-of-scope changes: none\n- CI: {ci}\n"
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "Tuning accepted by:\nDate:\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + facts.format(tests="make test → pass (12)", ci="green — https://x/pr/1") + review)
+        errors, warnings = self.check()
+        self.assertIn(f"SPEC-{i}: Requirements differ from backlog/stories.toml; only in the Spec: FR-28 (align one of them)", warnings)
+        self.assertTrue(any(w.startswith(f"SPEC-{i} Done with AC naming no test") and "AC2" in w for w in warnings), warnings)
+        self.assertIn("delivery/20-specs/README.md out of date: run `make backlog`", warnings)
+        self.assertNotIn(f"RUN-{i}: Persisted", " ".join(warnings))
+        self.assertIn(f"RUN-{i}: Closed without `Tuning accepted by` (§5): record who accepted the result and when", warnings)
+        r.run("tools/gen_backlog.py")
+        self.assertIn(f"| [{i}](SPEC-{i}-walking-skeleton.md) | Walking skeleton | Done | Closed |", r.read("delivery/20-specs/README.md"))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", spec.format(i=i, req="FR-01, NFR-1"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", run.replace("Tuning accepted by:", "Tuning accepted by: PO") + facts.format(tests="make test → fail (1)", ci="green / red / none (no remote) — <PR URL>") + review)
+        errors, warnings = self.check(False)
+        self.assertNotIn("Requirements differ", " ".join(warnings))
+        self.assertIn(f"RUN-{i}: Closed with failing tests in §8: make test → fail (1)", errors)
+        self.assertIn(f"RUN-{i}: Closed without the `CI:` fact in §8", errors)
+        self.assertNotIn("Tuning accepted", " ".join(warnings))
+
     def test_review_then_close(self):
         r = self.r
         r.through_inception()
