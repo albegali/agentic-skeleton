@@ -215,7 +215,7 @@ It shows a table of tier × tool, asks which model to use per tier, updates `mod
 |---|---|---|
 | `fast` | `/next`, `/close`, `/weekly`, `/choose-models` | the vendor's small, cheap model |
 | `balanced` | requirements, mockup, backlog, analysis, coding, review | the vendor's mid model, strong at coding |
-| `deep` | `/architecture`, `/onboard`, L/XL stories when you ask | the vendor's largest model |
+| `deep` | `/architecture`, `/onboard`, L/XL stories (`/run-deep`) | the vendor's largest model |
 
 You can also edit `models.toml` by hand and run `make agents`.
 
@@ -404,7 +404,8 @@ Drop quick notes in `project-journal/notes/current-week.md` during the week: `/w
 | regenerate the backlog views | `make backlog` |
 | change models | `/choose-models` or edit `models.toml` → `make agents` |
 | add a story | add it to `backlog/stories.toml` → `make backlog` → add it to `PLAN.md` |
-| ask for a bigger model on a hard story | `/run CP0207` + "use the deep tier" |
+| run a hard story on a bigger model | `/run-deep CP0207` (`make next` proposes it for L/XL stories) |
+| see sessions, tier share, context peaks, cost | `make usage DAYS=30` |
 | resume a broken session | fresh session → `make next` (the state is in the files) |
 
 ---

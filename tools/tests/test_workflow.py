@@ -240,6 +240,78 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(r.next("DM0102")["step"], "workshop")
         r.run("tools/check_workflow.py")
 
+    def test_large_stories_route_to_the_deep_command(self):
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "L"', 1))
+        i = "DM0101"
+        r.write(f"analysis/30-refined/REFINED_{i}_walking_skeleton.md", REFINED_MD)
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        n = r.next()
+        self.assertEqual((n["step"], n["command"], n["tier"], n["models"]["claude-code"]), ("run-strategy", f"/run-deep {i}", "deep", "opus"))
+        cmd = r.read(".claude/commands/run-deep.md")
+        self.assertIn("model: opus", cmd)
+        self.assertIn("approve-deviation", cmd)  # same body as /run
+        r.write("backlog/stories.toml", STORIES.format(st="approved"))
+        self.assertEqual((r.next()["command"], r.next()["tier"]), (f"/run {i}", "balanced"))
+
+    def test_session_default_model_is_the_balanced_tier(self):
+        r = self.r
+        self.assertEqual(json.loads(r.read(".claude/settings.json"))["model"], "sonnet")
+        own = {"model": "claude-opus-5-5", "permissions": {"allow": ["Bash(ls)"]}}
+        r.write(".claude/settings.json", json.dumps(own))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(s["model"], "claude-opus-5-5")  # chosen by the project: kept
+        self.assertIn("Bash(make next)", s["permissions"]["allow"])
+        self.assertIn("session default model 'claude-opus-5-5' is not the balanced tier 'sonnet'", r.run("tools/check_workflow.py").stdout)
+        r.write(".claude/settings.json", json.dumps({"permissions": {}}))
+        r.run("tools/render_agents.py")
+        self.assertEqual(json.loads(r.read(".claude/settings.json"))["model"], "sonnet")
+
+    def test_usage_splits_sessions_by_command_and_reports_tier_shares(self):
+        r = self.r
+        home = os.path.join(r.dir, ".home")
+        r.env.update(CLAUDE_CONFIG_DIR=os.path.join(home, "claude"), CODEX_HOME=os.path.join(home, "codex"))
+        slug = "".join(c if c.isalnum() else "-" for c in os.path.abspath(r.dir))
+        msg = lambda i, model, out, ctx=100: {"type": "assistant", "sessionId": "s1", "timestamp": "2026-10-14T09:00:%02dZ" % i, "requestId": f"q{i}",
+                                              "message": {"id": f"m{i}", "model": model, "usage": {"input_tokens": 1, "output_tokens": out,
+                                                          "cache_creation_input_tokens": 10, "cache_read_input_tokens": ctx}}}
+        user = lambda content, i=0, **k: {"type": "user", "sessionId": "s1", "userType": "external", "timestamp": "2026-10-14T09:00:%02dZ" % i,
+                                          "message": {"role": "user", "content": content}, **k}
+        claude = [user("<command-name>/clear</command-name>"), user("<command-name>/weekly</command-name>", 1),
+                  user([{"type": "text", "text": "<!-- step body -->"}], isMeta=True),
+                  msg(2, "claude-opus-5-5", 50), msg(2, "claude-opus-5-5", 50), msg(3, "claude-haiku-5-5", 5),
+                  user([{"type": "tool_result", "content": "The user doesn't want to proceed with this tool use. The tool use was rejected"}]),
+                  user([{"type": "text", "text": "[Request interrupted by user]"}]), user([{"type": "text", "text": "go on"}], 4),
+                  user("<command-name>/run</command-name>", 5), msg(6, "claude-sonnet-5-5", 30, ctx=90_000),
+                  {"type": "cost-state", "sessionId": "s1", "totalCostUSD": 3.0,
+                   "modelUsage": {"claude-opus-5-5": {"costUSD": 2.0}, "claude-sonnet-5-5": {"costUSD": 0.9}, "claude-haiku-5-5": {"costUSD": 0.1}}}]
+        codex = [{"type": "session_meta", "timestamp": "2026-10-15T10:00:00Z", "payload": {"id": "c1", "cwd": r.dir}},
+                 {"type": "turn_context", "payload": {"model": "gpt-5-codex"}},
+                 {"type": "event_msg", "payload": {"type": "user_message", "message": "/prompts:analysis DM0101"}},
+                 {"type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {
+                     "input_tokens": 900, "cached_input_tokens": 600, "output_tokens": 70}, "last_token_usage": {"input_tokens": 900}}}}]
+        other = [{**codex[0], "payload": {"id": "c2", "cwd": "/elsewhere"}}, *codex[1:]]
+        r.write(f".home/claude/projects/{slug}/s1.jsonl", "\n".join(map(json.dumps, claude)) + "\n")
+        r.write(".home/codex/sessions/2026/10/15/rollout-a.jsonl", "\n".join(map(json.dumps, codex)) + "\n")
+        r.write(".home/codex/sessions/2026/10/15/rollout-b.jsonl", "\n".join(map(json.dumps, other)) + "\n")
+        data = json.loads(r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19", "--json").stdout)
+        weekly, run, cx = data["rows"]
+        self.assertEqual((weekly["step"], weekly["tier"], weekly["main"], weekly["main_tier"], weekly["mismatch"]),
+                         ("weekly", "fast", "claude-opus-5-5", "deep", True))  # /clear neither labels nor splits
+        self.assertEqual((weekly["prompts"], weekly["interrupts"], weekly["rejected"]), (2, 1, 1))
+        self.assertEqual(weekly["models"]["claude-opus-5-5"]["output"], 50)  # duplicate message counted once
+        self.assertEqual((run["step"], run["mismatch"], run["over"], run["cost"]), ("run", False, True, None))
+        self.assertEqual((cx["step"], cx["main"], cx["models"]["gpt-5-codex"]["cache_read"], cx["peak"]), ("analysis", "gpt-5-codex", 600, 900))
+        self.assertAlmostEqual(data["models"]["claude-opus-5-5"]["cost_share"], 2.0 / 3.0)
+        self.assertAlmostEqual(data["tiers"]["deep"]["cost_share"], 2.0 / 3.0)
+        out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
+        self.assertIn("2 sessions, 3 commands", out)
+        self.assertIn("deep 25% of calls, 67% of cost", out)
+        self.assertIn("No sessions", r.run("tools/usage.py", "--since", "2026-11-01", "--until", "2026-11-07").stdout)
+
     def test_check_detects_errors(self):
         r = self.r
         r.through_inception()

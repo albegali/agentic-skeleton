@@ -268,6 +268,15 @@ def step_info(step: str) -> dict:
     return wf.workflow().get("steps", {}).get(step, {})
 
 
+DEEP_SIZES = ("L", "XL")
+
+
+def deep(step: str, ids: list[str]) -> bool:
+    """L/XL stories run the step's deep_command (deep tier) when it declares one."""
+    st = wf.stories()
+    return bool(step_info(step).get("deep_command")) and any(st.get(i, {}).get("size") in DEEP_SIZES for i in ids)
+
+
 def command_for(step: str, ids: list[str]) -> str:
     s = step_info(step)
     if step == "done":
@@ -276,7 +285,7 @@ def command_for(step: str, ids: list[str]) -> str:
         return "human action (see workflow/steps/human-gate.md)"
     if s.get("owner") == "human" or not s.get("command"):
         return "human action (see workflow/steps/%s.md)" % step
-    return f"/{s['command']}" + (" " + " ".join(ids) if ids else "")
+    return f"/{s['deep_command'] if deep(step, ids) else s['command']}" + (" " + " ".join(ids) if ids else "")
 
 
 def main() -> None:
@@ -313,8 +322,8 @@ def run(args: list[str], as_json: bool) -> None:
     rec["phase"] = phase
     rec["weekly_due"] = weekly_due()
     info = step_info(rec["step"])
-    rec["tier"] = info.get("tier")
-    rec["models"] = {k: wf.model_for(k, info["tier"]) for k in wf.enabled_tools()} if info.get("tier") else {}
+    rec["tier"] = "deep" if deep(rec["step"], rec["ids"]) else info.get("tier")
+    rec["models"] = {k: wf.model_for(k, rec["tier"]) for k in wf.enabled_tools()} if rec["tier"] else {}
     rec["command"] = command_for(rec["step"], rec["ids"])
 
     if as_json:
@@ -346,7 +355,7 @@ def run(args: list[str], as_json: bool) -> None:
     print(f"  Run: {rec['command']}" + (" (fresh session)" if info.get("owner") == "agent" else ""))
     if rec.get("tier"):
         print(f"  Tier: {rec['tier']} → {wf.tier_line(rec['tier'])}")
-        if info.get("deep_when"):
+        if info.get("deep_when") and rec["tier"] != "deep":
             print(f"  Deep tier when: {info['deep_when']}")
     if rec.get("optional"):
         print(f"  In parallel (analysis ahead): /analysis {' '.join(rec['optional']['ids'])}")

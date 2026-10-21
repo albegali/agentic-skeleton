@@ -15,6 +15,7 @@ Stdlib Python ≥ 3.11, no dependencies. Every script resolves the repository ro
 | `adopt.py` | `make adopt TARGET=…` | Installs the workflow into an existing repository without overwriting its files (marked blocks in `AGENTS.md` / `CLAUDE.md`, `include workflow.mk`, permissions union), detects the `[stack]` commands, sets `origin = "brownfield"`. Conflicts → nothing written. `--dry-run` prints the plan. Not installed in the target. |
 | `portal.py` | `make portal` | Start the agentic portal for this repository: downloads the pinned release bundle, verifies it, caches it in `.portal/<version>/`, starts it and opens the browser. See "Portal launcher". |
 | `repo_map.py` | `context.py --repo-map` | Cheap map of the codebase for `/onboard`: languages, tree with sizes, manifests, CI/infra, docs, entry points, tests, largest files, git hot spots. No file contents. |
+| `usage.py` | `make usage DAYS=…` | Agent sessions of this repository from the local logs of Claude Code (`~/.claude/projects/…`) and Codex (`~/.codex/sessions`), split by workflow command (built-ins such as `/clear` are ignored): step, step tier vs main model, peak context (flagged over ~80k), prompts, interrupts, rejected tool calls, tokens; per model: calls, tokens, cost and share of cost; per tier: share of calls and cost. Counts only, never prompt text. `--since/--until`, `--json`. Used by `/weekly`. |
 | `rename_id.py` | — | Replace a story ID everywhere (whole IDs only, both in the project format; `--dry-run` lists the changes). |
 | `wf.py` | — | Shared helpers. |
 

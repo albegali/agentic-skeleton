@@ -16,4 +16,4 @@ Arguments: the arguments above.
 - `approve-deviation <n>` → fill `Approved by` (`project.toml` owner) and `Date` of RUN §6 `Deviation #<n>`; if the Spec is not `In Progress` or `Ready`, stop and say what the Spec still needs. Otherwise apply its plan impact to §1 as new steps, RUN `Executing`, Spec `In Progress`, resume following `workflow/steps/execute.md`.
 - `cancel: <reason>` → the owner dropped the story: `status = "cancelled"` on the story in `backlog/stories.toml` (reason in `notes`); RUN (if any) `Cancelled` with the reason in §9 and code changes reverted or listed there; Spec (if any) `Cancelled`; Brief `Superseded`. No new RUN.
 
-Use the deep tier only if the user asked for it or the story is L/XL.
+L/XL stories run through `/run-deep <ID>` (same procedure, deep tier); otherwise use the deep tier only if the user asked for it.

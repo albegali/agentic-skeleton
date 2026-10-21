@@ -61,9 +61,12 @@ def merge(p: str, generated: str, block: str | None) -> str:
             data = json.loads(cur)
         except ValueError:
             sys.exit(f"{p}: invalid JSON; fix it, then run `make agents`")
+        gen = json.loads(generated)
         perms = data.setdefault("permissions", {})
-        for k, v in json.loads(generated)["permissions"].items():
+        for k, v in gen["permissions"].items():
             perms[k] = perms.get(k, []) + [x for x in v if x not in perms.get(k, [])]
+        if "model" in gen:  # set when absent; a model already there (the project's choice, or an older tier) is kept
+            data.setdefault("model", gen["model"])
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if block is not None and (BEGIN in cur or not cur.startswith("<!-- Generated")):
         return put_block(cur, block)
@@ -88,6 +91,8 @@ def retire(p: str) -> str | None:
                 del perms[k]
         if not perms:
             data.pop("permissions", None)
+        if data.get("model") == wf.model_for("claude-code", "balanced"):
+            data.pop("model")
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n" if data else None
     return None
 
@@ -102,9 +107,15 @@ SETTINGS = {
 }
 
 
+def settings() -> dict:
+    # Command frontmatter pins a model for the command's turn only: follow-ups ("ok", fixes) run on the session
+    # default, so it is set to the balanced tier (deep only through /run-deep or when the user switches).
+    return {"model": wf.model_for("claude-code", "balanced"), **SETTINGS}
+
+
 def render() -> dict[str, str]:
     w = wf.workflow()
-    cmds = w.get("commands", {})
+    cmds = {n: ({**c, "body": w["commands"][c["body_from"]]["body"]} if c.get("body_from") else c) for n, c in w.get("commands", {}).items()}
     agents = w.get("agents", {})
     tools = wf.enabled_tools()
     out: dict[str, str] = {}
@@ -114,7 +125,7 @@ def render() -> dict[str, str]:
         claude = ("@AGENTS.md\n\n"
                   "Claude Code specifics:\n"
                   "- Start with `/next`; between steps use `/clear` (except the `/run` chain of the same story).\n"
-                  "- Each command pins its model in the frontmatter (tier → model in `models.toml`). Do not switch to a larger model unless the user asks.\n"
+                  "- Each command pins its model in the frontmatter (tier → model in `models.toml`) for its own turn; the session default in `.claude/settings.json` is the balanced tier. Answer gates with the command (`/run <ID> approve`, `/run <ID> tuning: …`), not free text, so the pinned model runs them. L/XL stories use `/run-deep`. Do not switch to a larger model unless the user asks.\n"
                   "- Subagents in `.claude/agents/` only for independent workstreams.\n")
         out["CLAUDE.md"] = f"<!-- {HDR} -->\n# CLAUDE.md\n\n{claude}"
         blocks["CLAUDE.md"] = "## Agentic workflow\n\n" + claude
@@ -130,7 +141,7 @@ def render() -> dict[str, str]:
             out[f".claude/agents/{name}.md"] = ("---\n" f"name: {name}\n" f"description: {yaml_str(a['description'])}\n"
                                                 f"model: {wf.model_for('claude-code', a['tier'])}\n" f"tools: {', '.join(a.get('tools', []))}\n"
                                                 "---\n" f"<!-- {HDR} -->\n" + a["body"].strip() + "\n")
-        out[".claude/settings.json"] = json.dumps(SETTINGS, indent=2) + "\n"
+        out[".claude/settings.json"] = json.dumps(settings(), indent=2) + "\n"
 
     if "codex" in tools:
         for name, c in cmds.items():

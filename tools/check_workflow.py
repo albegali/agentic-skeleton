@@ -18,6 +18,7 @@ Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import re
 import subprocess
@@ -356,6 +357,12 @@ def check_revisions() -> None:
 def check_adapters() -> None:
     for p in render_agents.check(render_agents.render()):
         E.append(f"stale adapter (run `make agents`): {p}")
+    s = ".claude/settings.json"
+    if "claude-code" in wf.enabled_tools() and wf.exists(s):
+        model, balanced = json.loads(wf.read(s)).get("model"), wf.model_for("claude-code", "balanced")
+        if model != balanced:
+            W.append(f"{s}: session default model {model!r} is not the balanced tier {balanced!r}: "
+                     "follow-ups outside a command run on it (set it, or keep it on purpose)")
 
 
 def main() -> None:
