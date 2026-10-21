@@ -5,7 +5,7 @@ Stdlib Python ≥ 3.11, no dependencies. Every script resolves the repository ro
 | Script | Make | What |
 |---|---|---|
 | `wf.py` | — | Shared helpers; `version`, `plan`, `journal`, `story <ID>` print contract data (see JSON contract). |
-| `next_step.py` | `make next` | Next step from the files: inception gates, then sprints of `PLAN.md` and the stage of each story. `--json`, or one story: `next_step.py PR0101`. |
+| `next_step.py` | `make next` | Next step from the files: inception gates, then sprints of `PLAN.md` and the stage of each story. `--json`, or one story: `next_step.py PR0101`. Status values come from one vocabulary (`wf.STATUSES`, shared with `check_workflow.py`); case, emphasis, emoji and a trailing parenthetical are ignored, and an unknown value is a human `blocked` stage naming the file. |
 | `launch.py` | `make run` | Starts the app with `project.toml [stack] run`, waits for `url` to answer, opens the browser; Ctrl+C stops it (whole process group). `--no-browser`. Works without make: `python tools/launch.py`. |
 | `context.py` | `make context STEP=… IDS=…` | Context budget of a step with a token estimate: files to read, kickoff sources, only the cited FR/NFR sections and `architecture §N` sections, ADR files, other `reference/…` files cited by path, dependency excerpts, command outputs. `--index <file>` prints headings only (Markdown or HTML); `--package-rules` lists package `AGENTS.md`. |
 | `gen_backlog.py` | `make backlog` | `backlog/stories.toml` → `analysis/10-stories/`, `reference/backlog/epics/`, overview. `--deps` compact dependency list; `--csv` generic tracker import. |

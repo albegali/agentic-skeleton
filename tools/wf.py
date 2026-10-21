@@ -197,6 +197,55 @@ def md_status(text: str) -> str | None:
     return None if "→" in v else v
 
 
+# Status vocabulary per artifact (single source for next_step, check_workflow and the templates' lifecycles).
+STATUSES = {
+    "inception": ("draft", "approved"),                        # vision, requirements, mockup, architecture, stories.toml, PLAN.md
+    "adr": ("proposed", "accepted", "superseded", "rejected"),  # `superseded by ADR-xxx` → superseded
+    "analysis": ("draft", "analyzed", "workshop-ready", "updated"),
+    "refined": ("draft", "refined", "approved"),
+    "brief": ("Captured", "Refined into Spec", "Superseded", "Closed"),
+    "spec": ("Draft", "Ready", "In Progress", "Done", "Blocked"),
+    "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed"),
+}
+
+
+def _norm_status(v: str) -> str:
+    v = re.sub(r"[*_`~]", "", v)                    # **Ready**, `Closed`
+    v = re.sub(r"\s*[(\[].*$", "", v)               # Closed (2026-10-19), Done [see §9]
+    v = re.sub(r"[^\w\s-]", " ", v, flags=re.U)     # Closed ✅, Ready.
+    return re.sub(r"\s+", " ", v).strip().lower()
+
+
+def status(kind: str, raw: str | None) -> str | None:
+    """Canonical status of an artifact kind (case, emphasis, emoji, trailing parenthetical ignored); None if unknown."""
+    if raw is None:
+        return None
+    n = _norm_status(raw)
+    for v in STATUSES[kind]:
+        if _norm_status(v) == n or (kind == "adr" and v == "superseded" and n.startswith("superseded by")):
+            return v
+    return None
+
+
+def expected(kind: str) -> str:
+    return " | ".join(STATUSES[kind])
+
+
+def run_approved(text: str) -> bool:
+    """RUN §2 Human Approval has `- [x] Approved` ticked (case-insensitive box; prose elsewhere does not count)."""
+    sec = heading_section(text, r"^#\s+2\.") or ""
+    return bool(re.search(r"^\s*-\s*\[[xX]\]\s*Approved\b", sec, re.M))
+
+
+def strategy_written(text: str) -> bool:
+    """RUN §1 has a plan: a `- Step 1` line under `### Plan` that is not the template placeholder, or `Strategy ready: yes`."""
+    if re.search(r"^\s*Strategy ready:\s*yes\b", text, re.M | re.I):
+        return True
+    plan = heading_section(text, r"^###\s+Plan\b") or ""
+    m = re.search(r"^\s*-\s*Step 1\b(.*)$", plan, re.M)
+    return bool(m) and bool(re.sub(r"\([^)]*\)", "", m.group(1)).strip(" :.…"))  # `- Step 1 (TSK-01): …` is still empty
+
+
 def artifact_status(p: str) -> str | None:
     """Status of an inception artifact: frontmatter `status:` (md) or top-level `status` (toml)."""
     if not exists(p):

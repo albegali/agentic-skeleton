@@ -22,8 +22,14 @@ E: list[str] = []
 W: list[str] = []
 FR_FILE = "reference/product/functional-requirements.md"
 NFR_FILE = "reference/product/non-functional-requirements.md"
-SPEC_ST = {"Draft", "Ready", "In Progress", "Done", "Blocked"}
-RUN_ST = {"Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed"}
+INCEPTION = [FR_FILE, NFR_FILE, "reference/product/vision.md", "reference/product/mockup-reference.md",
+             "reference/architecture/architecture.md", "backlog/stories.toml", "PLAN.md"]
+
+
+def bad_status(label: str, kind: str, raw: str | None) -> None:
+    """Error when a status value is not in the shared vocabulary (wf.STATUSES): next_step would block on it."""
+    if raw and not wf.status(kind, raw):
+        E.append(f"{label}: invalid status '{raw}' (expected {wf.expected(kind)})")
 
 
 def heading_ids(p: str, kind: str) -> list[str]:
@@ -45,6 +51,10 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
             p = re.search(r"\*\*Priority\*\*:\s*(\w+)", sec)
             if m and p:
                 prio[m.group(1)] = p.group(1)
+    for f in INCEPTION:
+        bad_status(f, "inception", wf.artifact_status(f))
+    for p in wf.matches("reference/architecture/ADR-*.md"):
+        bad_status(wf.rel(p), "adr", wf.front(wf.read(p), "status"))
     adrs = [os.path.basename(p) for p in wf.matches("reference/architecture/ADR-*.md")]
     nums = [m.group(1) for a in adrs if (m := re.match(r"ADR-(\d{3})-[a-z0-9-]+\.md$", a))]
     for a in adrs:
@@ -130,6 +140,11 @@ def check_chain() -> None:
         for p in wf.matches(pat):
             if not re.match(rx, os.path.basename(p)):
                 E.append(f"{kind} naming: {wf.rel(p)}")
+    for kind, pat in (("analysis", "analysis/20-analysis/ANALYSIS_*.md"), ("refined", "analysis/30-refined/REFINED_*.md")):
+        for p in wf.matches(pat):
+            bad_status(wf.rel(p), kind, wf.front(wf.read(p), "status"))
+    for p in wf.matches("delivery/10-briefs/BRIEF-*.md"):
+        bad_status(wf.rel(p), "brief", wf.md_status(wf.read(p)))
     for p in wf.matches("analysis/30-refined/REFINED_*.md"):
         i = os.path.basename(p).split("_")[1]
         if not wf.matches(f"analysis/20-analysis/ANALYSIS_{i}_*.md"):
@@ -137,9 +152,9 @@ def check_chain() -> None:
     for p in wf.matches("delivery/20-specs/SPEC-*.md"):
         t = wf.read(p)
         i = os.path.basename(p).split("-")[1]
-        s = wf.md_status(t)
-        if s and s not in SPEC_ST:
-            E.append(f"SPEC-{i}: invalid status '{s}'")
+        raw = wf.md_status(t)
+        bad_status(f"SPEC-{i}", "spec", raw)
+        s = wf.status("spec", raw)
         if f"BRIEF-{i}" not in t:
             E.append(f"SPEC-{i}: does not reference BRIEF-{i}")
         if not wf.matches(f"delivery/10-briefs/BRIEF-{i}-*.md"):
@@ -152,14 +167,14 @@ def check_chain() -> None:
         if not m:
             continue
         i = m.group(1)
-        s = wf.md_status(t)
-        if s and s not in RUN_ST:
-            E.append(f"RUN-{i}: invalid status '{s}'")
+        raw = wf.md_status(t)
+        bad_status(f"RUN-{i}", "run", raw)
+        s = wf.status("run", raw)
         if not wf.matches(f"delivery/20-specs/SPEC-{i}-*.md"):
             E.append(f"RUN-{i}: SPEC-{i} missing")
         if "# 1. Execution Strategy" not in t:
             E.append(f"RUN-{i}: Execution Strategy missing")
-        if s and s != "Draft" and not re.search(r"- \[x\] Approved", t):
+        if s and s != "Draft" and not wf.run_approved(t):
             E.append(f"RUN-{i}: status {s} without recorded approval (§2)")
         if s == "Closed" and not re.search(r"# 7\. Persistence.*?- \[x\]", t, re.S):
             E.append(f"RUN-{i}: Closed without Persistence")

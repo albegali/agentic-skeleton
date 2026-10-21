@@ -10,7 +10,7 @@
 ---
 
 ## Status
-Captured → Refined into Spec / Superseded
+Captured → Refined into Spec → Closed / Superseded
 
 ---
 

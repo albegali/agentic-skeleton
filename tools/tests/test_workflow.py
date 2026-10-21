@@ -510,6 +510,65 @@ class EdgeCaseTest(unittest.TestCase):
         r.write("project-journal/weekly/2000-01-01.md", "# Old\n")  # older files do not count
         self.assertFalse(r.next()["weekly_due"])
 
+    def test_status_values_are_normalised_and_unknown_ones_block(self):
+        r = self.r
+        r.through_inception()
+        i, spec, run = "DM0101", "delivery/20-specs/SPEC-DM0101-walking-skeleton.md", "delivery/30-runs/RUN-DM0101.md"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        for st, want in (("draft", "spec-approval"), ("DRAFT", "spec-approval"), ("**Ready**", "run-strategy"),
+                         ("Ready ✅", "run-strategy"), ("Approved", "blocked"), ("Redy", "blocked")):
+            r.write(spec, SPEC_MD.format(i=i, st=st))
+            n = r.next(i)
+            self.assertEqual(n["step"], want, st)
+            if want == "blocked":
+                self.assertEqual(n["owner"], "human")
+                self.assertIn(f"{spec}: unknown status '{st}'", n["why"])
+        r.write(spec, SPEC_MD.format(i=i, st="Ready"))
+        for st in ("closed", "Closed ✅", "Closed (2026-10-19)", "`Closed`"):
+            r.write(run, RUN.format(i=i, st=st, plan="build", ok="x"))
+            self.assertEqual(r.next(i)["step"], "done", st)
+        r.write(run, RUN.format(i=i, st="Finished", plan="build", ok="x"))
+        self.assertEqual(r.next(i)["step"], "blocked")
+        self.assertIn("invalid status 'Finished'", r.run("tools/check_workflow.py", ok=False).stdout)
+
+    def test_strategy_and_approval_detection(self):
+        r = self.r
+        r.through_inception()
+        i, run = "DM0101", "delivery/30-runs/RUN-DM0101.md"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Ready"))
+        for plan, want in (("…", "run-strategy"), ("(TSK-01): …", "run-strategy"), ("(TSK-01): build the API", "run-approval")):
+            r.write(run, RUN.format(i=i, st="Draft", plan=plan, ok=" ").replace("- Step 1: (", "- Step 1 ("))
+            self.assertEqual(r.next(i)["step"], want, plan)
+        r.write(run, RUN.format(i=i, st="Draft", plan="…", ok=" ") + "\nStrategy ready: yes\n")
+        self.assertEqual(r.next(i)["step"], "run-approval")
+        r.write(run, RUN.format(i=i, st="Draft", plan="build", ok="X"))
+        self.assertEqual(r.next(i)["step"], "execute")  # [X] counts
+        prose = RUN.format(i=i, st="Executing", plan="build", ok=" ") + "\n# 9. Outcome\n- [x] Approved by nobody\n"
+        r.write(run, prose)  # a ticked "Approved" outside §2 is not an approval
+        self.assertIn("without recorded approval", r.run("tools/check_workflow.py", ok=False).stdout)
+        r.write(run, RUN.format(i=i, st="Draft", plan="build", ok=" ") + "\n# 9. Outcome\n- [x] Approved by nobody\n")
+        self.assertEqual(r.next(i)["step"], "run-approval")
+
+    def test_check_validates_every_artifact_status(self):
+        r = self.r
+        r.through_inception()
+        r.write("reference/architecture/ADR-002-db.md", "---\nstatus: superseded by ADR-003\n---\n# ADR-002\n")
+        r.write("reference/architecture/ADR-003-db.md", "---\nstatus: Accepted\n---\n# ADR-003\n")
+        r.write("delivery/10-briefs/BRIEF-DM0101-walking-skeleton.md", "# BRIEF\n## Status\nClosed\n")
+        r.run("tools/check_workflow.py")
+        self.assertEqual(r.next()["phase"], "delivery")
+        r.write("reference/product/vision.md", "---\nstatus: aproved\n---\n# Vision\n")
+        r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", "---\nstatus: done\n---\n# A\n")
+        r.write("delivery/10-briefs/BRIEF-DM0101-walking-skeleton.md", "# BRIEF\n## Status\nShipped\n")
+        out = r.run("tools/check_workflow.py", ok=False).stdout
+        for bad in ("reference/product/vision.md: invalid status 'aproved'", "ANALYSIS_DM0101_walking_skeleton.md: invalid status 'done'",
+                    "BRIEF-DM0101-walking-skeleton.md: invalid status 'Shipped'"):
+            self.assertIn(bad, out)
+        n = r.next()
+        self.assertEqual((n["step"], n["files"]), ("approve", ["reference/product/vision.md"]))
+        self.assertIn("unknown status 'aproved'", n["why"])
+
     def test_invalid_settings_json_is_reported(self):
         r = self.r
         r.write(".claude/settings.json", "{not json")
