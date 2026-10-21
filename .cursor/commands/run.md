@@ -10,7 +10,7 @@ Arguments: <ID> [approve | revise: … | tuning: … | approve-deviation <n> | c
 Arguments: <the text typed after the command>.
 
 - ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
-- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
+- `approve` (typed by the human) → on the story branch (create it now if missing, `delivery/guide/git.md`): record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`; commit these two files alone, with the trailers `Approved-by: <owner> (via /run approve)` and `Approved-at: <ISO datetime>`; then follow `workflow/steps/execute.md`. If the human already ran `make approve … GATE=strategy`, just execute. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
 - `revise: …` → update only the strategy (untick `Stopped` in §2, status `Draft`, note the request in §2) and stop again.
 - ID only with an approved strategy → resume following `workflow/steps/execute.md`.
 - `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`); a `Persisted` or `Reviewed` RUN goes back to `Tuning` (then `/persist` again).

@@ -17,10 +17,12 @@ jobs:
       WF_REQUIRE_JSONSCHEMA: "1"  # contract schema tests must run in CI, never be skipped
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }  # --git: approval before code, revisions after closure
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python-version }}" }
       - run: python -m pip install jsonschema  # test dependency only
       - run: make check
+      - run: python tools/check_workflow.py --git
       - run: make test-tools
   other-os:  # all tools tests on the other OSes (NFR-10; Linux is covered above): paths, console encoding, launcher
     runs-on: ${{ matrix.os }}

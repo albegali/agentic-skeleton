@@ -67,6 +67,9 @@ def merge(p: str, generated: str, block: str | None) -> str:
             perms[k] = perms.get(k, []) + [x for x in v if x not in perms.get(k, [])]
         if "model" in gen:  # set when absent; a model already there (the project's choice, or an older tier) is kept
             data.setdefault("model", gen["model"])
+        for event, entries in gen.get("hooks", {}).items():  # our hook entries are added once; the project's stay
+            mine = data.setdefault("hooks", {}).setdefault(event, [])
+            mine += [e for e in entries if e not in mine]
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if block is not None and (BEGIN in cur or not cur.startswith("<!-- Generated")):
         return put_block(cur, block)
@@ -93,6 +96,14 @@ def retire(p: str) -> str | None:
             data.pop("permissions", None)
         if data.get("model") == wf.model_for("claude-code", "balanced"):
             data.pop("model")
+        for event, entries in SETTINGS["hooks"].items():
+            left = [e for e in data.get("hooks", {}).get(event, []) if e not in entries]
+            if left:
+                data["hooks"][event] = left
+            else:
+                data.get("hooks", {}).pop(event, None)
+        if not data.get("hooks", True):
+            data.pop("hooks")
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n" if data else None
     return None
 
@@ -102,8 +113,13 @@ SETTINGS = {
         "allow": ["Bash(make next)", "Bash(make check)", "Bash(make backlog)", "Bash(make agents)", "Bash(make test-tools)",
                   "Bash(python3 tools/next_step.py:*)", "Bash(python3 tools/context.py:*)", "Bash(python3 tools/gen_backlog.py:*)",
                   "Bash(python3 tools/check_workflow.py)", "Bash(git status)", "Bash(git diff:*)", "Bash(git log:*)"],
-        "deny": ["Bash(git push --force:*)", "Bash(terraform apply:*)", "Read(./.env)", "Read(./.env.*)"],
-    }
+        "deny": ["Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)", "Bash(git push origin --delete:*)",
+                 "Bash(git reset --hard:*)", "Bash(git branch -D:*)", "Bash(make approve:*)", "Bash(python3 tools/approve.py:*)",
+                 "Bash(cat .env:*)", "Bash(terraform apply:*)", "Read(./.env)", "Read(./.env.*)"],
+    },
+    # human gates and mode boundaries (tools/gate_guard.py); the deny list above only matches command prefixes
+    "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash",
+                              "hooks": [{"type": "command", "command": 'python3 "$CLAUDE_PROJECT_DIR/tools/gate_guard.py"'}]}]},
 }
 
 
