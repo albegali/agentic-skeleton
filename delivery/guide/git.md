@@ -5,6 +5,7 @@ Every other file links here instead of restating the rule.
 ## Branch
 - One branch per story: `<id-lowercase>-<slug>` (e.g. `pr0101-login`), created from an up-to-date `main` before the first change of the RUN. Spikes use `spike/<id-lowercase>` and are never merged.
 - Commit and push only at the end of `/persist` and `/close`, or when the user asks. The review's RUN §11 entry is committed by the next of the two.
+- Attribution: `project.toml` `[git] trailers`. `none` (default) → no `Co-Authored-By:` trailer and no "Generated with …" line in commit messages or PR bodies, even if the tool adds them by default; `tool` → keep the tool's default lines.
 
 ## `/persist` — the story's PR, nothing merged
 1. Commit on the story branch and push it.

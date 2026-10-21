@@ -74,6 +74,10 @@ def check_inception() -> tuple[set[str], set[str], dict[str, str]]:
     for src in wf.sources() + ([wf.design()] if wf.design() else []):
         if not wf.exists(src):
             W.append(f"project.toml [inception] source not found: {src}")
+    g = wf.project().get("git", {})
+    for key, allowed in (("merge", ("squash", "merge", "rebase")), ("trailers", ("none", "tool"))):
+        if key in g and g[key] not in allowed:
+            E.append(f"project.toml [git] {key} = {g[key]!r}: expected one of {', '.join(allowed)}")
     mref = "reference/product/mockup-reference.md"
     if wf.exists(mref) and fr:
         for x in sorted(set(re.findall(r"\bFR-\d+\b", wf.read(mref))) - set(fr)):

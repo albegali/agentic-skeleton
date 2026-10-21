@@ -29,16 +29,9 @@ Order in delivery: analysis one sprint ahead; development one story at a time, i
 ## Choosing models
 
 - Steps declare a **tier**; `models.toml` maps tier → model per vendor and tool. `/choose-models` walks you through it, `make agents` regenerates the adapters.
-- Defaults: `fast` for `/next`, `/weekly`, `/choose-models`; `balanced` for everything else; `deep` for `/architecture` and `/onboard`. Ask for deep explicitly on L/XL stories (`/run <ID>` + "use the deep tier").
+- Which tier each step uses: [`AGENTS.md`](../AGENTS.md) §5 rule 4 (the per-step table is in [`STEPS.md`](STEPS.md)). Ask for deep explicitly on L/XL stories (`/run <ID>` + "use the deep tier").
 - Claude Code and Copilot pin the model per command; Codex and Cursor print the recommended model at the top of the command: switch to it before running.
 
-## Token rules (summary of AGENTS.md §5)
+## Token rules
 
-1. Fresh session per step (except the `/run` chain of one story).
-2. Read only what `tools/context.py` prints; long docs by section.
-3. Scripts before the LLM (`make next`, `make check`, `make backlog`).
-4. Right tier; deep only when needed.
-5. No subagents by default.
-6. Short chat output; the content lives in files.
-7. No re-reading of what was just written.
-8. Resume from `make next`.
+They are binding for agents and listed once, in [`AGENTS.md`](../AGENTS.md) §5. What they mean for you: open a fresh session per step (except the `/run` chain of one story), and resume from `make next`.

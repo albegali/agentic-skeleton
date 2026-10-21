@@ -1,6 +1,6 @@
 # Step mockup — clickable mockup (product mode)
 
-**Command**: `/mockup [FR-xx… | screens]` · **Tier**: balanced (deep for complex UIs) · **Session**: fresh
+**Command**: `/mockup [FR-xx… | screens]` · **Tier**: balanced · **Session**: fresh
 
 **Context**: `python3 tools/context.py mockup`. Only requirements flagged `ui: yes` matter; skip the rest.
 

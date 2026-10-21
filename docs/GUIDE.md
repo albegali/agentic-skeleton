@@ -213,9 +213,9 @@ It shows a table of tier × tool, asks which model to use per tier, updates `mod
 
 | Tier | Used for | Pick |
 |---|---|---|
-| `fast` | `/next`, `/weekly`, `/choose-models` | the vendor's small, cheap model |
+| `fast` | `/next`, `/close`, `/weekly`, `/choose-models` | the vendor's small, cheap model |
 | `balanced` | requirements, mockup, backlog, analysis, coding, review | the vendor's mid model, strong at coding |
-| `deep` | `/architecture`, L/XL stories when you ask | the vendor's largest model |
+| `deep` | `/architecture`, `/onboard`, L/XL stories when you ask | the vendor's largest model |
 
 You can also edit `models.toml` by hand and run `make agents`.
 
@@ -427,7 +427,7 @@ What the skeleton already does for you:
 - per-step context budgets (`tools/context.py`), with requirement **sections** instead of whole documents;
 - thin commands that point to step files, which load only when used;
 - a slim delivery guide, with RUN, hotfix and refactor sections loaded on demand;
-- the `fast` tier for routing and the journal, `deep` only for architecture.
+- the `fast` tier for routing, closure and the journal, `deep` only for architecture and onboarding (tier rule: `AGENTS.md` §5).
 
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.

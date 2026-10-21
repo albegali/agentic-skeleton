@@ -11,7 +11,7 @@ Canonical rules for every AI agent working in this repository, whatever the tool
 | Mode | For | Writes in | Guide |
 |---|---|---|---|
 | **product** | vision, requirements, mockup, architecture, backlog, release plan (inception); onboarding of an existing codebase | `reference/`, `backlog/`, `PLAN.md` | `workflow/steps/<step>.md` |
-| **analyst** | Analysis, workshop preparation, Refined Story, backlog consolidation | `analysis/` | `analysis/AGENT_GUIDE.md` |
+| **analyst** | Analysis, workshop preparation, Refined Story, backlog consolidation | `analysis/`; outside it only the exceptions in `analysis/AGENTS.md` | `analysis/AGENT_GUIDE.md` |
 | **developer** | Brief, Spec, RUN, code, persistence | `delivery/`, code | `delivery/AGENT_GUIDE.md` |
 | **review** | consistency Brief/Spec/RUN, scope creep, quality gates | RUN §11 and RUN status only | `workflow/steps/review.md` |
 | **journal** | weekly / monthly project journal | `project-journal/` | `workflow/steps/weekly.md` |
@@ -52,7 +52,7 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 1. **Fresh session per step**, except the RUN chain of one story (strategy → approval → execution → tuning → persistence).
 2. **The context budget is binding**: read only what `tools/context.py` prints. In long documents use the extracted sections, never the whole file.
 3. **Scripts before the LLM**: state, naming, consistency and backlog views come from `make next`, `make check`, `make backlog`.
-4. **Right tier**: `fast` for state and journal, `balanced` for analysis, code and review, `deep` only for architecture, L/XL stories, or when the user asks. Mapping per vendor in `models.toml`.
+4. **Right tier** (single source; other files link here): `fast` for state, journal and closure, `balanced` for everything else, `deep` only for `/architecture`, `/onboard`, L/XL stories, or when the user asks. Mapping per vendor in `models.toml`.
 5. **No subagents by default**: only for genuinely independent workstreams.
 6. **Short output**: artifacts follow templates without restating sources; chat gets a few lines, the content is in the files.
 7. **Do not re-read** what you just wrote; read guides and templates once per session.

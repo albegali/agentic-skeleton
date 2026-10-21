@@ -252,6 +252,17 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("without recorded approval", out.stdout)
         self.assertIn("SPEC-DM0101 missing", out.stdout)
 
+    def test_check_validates_git_settings(self):
+        r = self.r
+        r.toml_set("project.toml", "git", "trailers", "co-author")
+        r.toml_set("project.toml", "git", "merge", "ff")
+        out = r.run("tools/check_workflow.py", ok=False).stdout
+        self.assertIn("[git] trailers = 'co-author'", out)
+        self.assertIn("[git] merge = 'ff'", out)
+        r.toml_set("project.toml", "git", "trailers", "tool")
+        r.toml_set("project.toml", "git", "merge", "rebase")
+        r.run("tools/check_workflow.py")
+
     def test_stale_adapter_detected(self):
         with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
             f.write("manual edit\n")
