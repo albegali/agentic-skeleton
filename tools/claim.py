@@ -36,7 +36,7 @@ def set_claim(text: str, i: str, who: str, when: str) -> str:
     for n, b in enumerate(blocks):
         if b.startswith("[[story]]") and re.search(rf'(?m)^id\s*=\s*"{re.escape(i)}"', b):
             b = re.sub(r'(?m)^claimed_(by|at)\s*=.*\n?', "", b)
-            b = re.sub(rf'(?m)^(id\s*=\s*"{re.escape(i)}"[^\n]*\n)', rf'\g<1>claimed_by = "{who}"\nclaimed_at = "{when}"\n', b, count=1)
+            b = re.sub(rf'(?m)^(id\s*=\s*"{re.escape(i)}"[^\n]*\n)', lambda m: f'{m.group(1)}claimed_by = "{who}"\nclaimed_at = "{when}"\n', b, count=1)
             blocks[n] = b
             return "".join(blocks)
     sys.exit(f"{i} not found in backlog/stories.toml")
