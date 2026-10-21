@@ -2,7 +2,7 @@
 
 **Command**: `/refine <ID…> <minutes file>` · **Tier**: balanced · **Session**: fresh; stories of the same workshop together (max 4)
 
-**Context**: `python3 tools/context.py refine {IDS}` + the minutes. Nothing else, except references cited in the Analysis.
+**Context**: `python3 tools/context.py refine {IDS} --with {MINUTES}` — guide, template, Story and Analysis, the minutes, the references the Analysis cites. Nothing else.
 
 **Prompt**
 ```

@@ -431,7 +431,8 @@ What the skeleton already does for you:
 
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.
-2. If the execution session gets past about half the context, start fresh and run `/run <ID>`: the RUN is the memory.
+2. If a session gets past about 80k tokens (Claude Code: `/context`), `/clear` and resume with the step's command (`/run <ID>` during execution): the RUN is the memory.
+   Every session also carries a fixed baseline before the step reads anything: the tool's system prompt, the tool schemas of each enabled MCP server, and the skill list. It can be tens of thousands of tokens. Disable the MCP servers and plugins this repository does not use (Claude Code: `/mcp`, or `enabledMcpjsonServers` / `disabledMcpjsonServers` in `.claude/settings.json`); `context.py` estimates only what the step adds.
 3. Keep stories small (S/M). Split XL stories in `/backlog`.
 4. Don't paste long logs or whole files into the chat: point to the path.
 5. Batch related stories in `/analysis` (at most 4) and `/refine` (same workshop).
