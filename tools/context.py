@@ -13,6 +13,7 @@ Budgets are declared in workflow/workflow.toml ([steps.<step>]: read, first, ref
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -28,19 +29,8 @@ ARCH_RX = re.compile(r"\barchitecture(?:\.md)?\s*§\s*(\d+)")
 ARCH = "reference/architecture/architecture.md"
 BIG = 400  # lines: warn the agent to read only what it needs
 ROOT_RULES = {"AGENTS.md", "analysis/AGENTS.md", "delivery/AGENTS.md"}
-
-
-def section(text: str, start_rx: str) -> str | None:
-    """From the heading matching start_rx to the next heading of the same or higher level."""
-    lines = text.splitlines()
-    for n, line in enumerate(lines):
-        m = re.match(r"^(#+)\s", line)
-        if m and re.search(start_rx, line):
-            level = len(m.group(1))
-            end = next((k for k in range(n + 1, len(lines))
-                        if (h := re.match(r"^(#+)\s", lines[k])) and len(h.group(1)) <= level), len(lines))
-            return "\n".join(lines[n:end]).strip()
-    return None
+RUN_TIMEOUT = 60  # seconds per `run` command of a budget
+section = wf.heading_section
 
 
 def tail_from(text: str, num: str) -> str | None:
@@ -60,7 +50,7 @@ def index(p: str) -> str:
             if txt:
                 out.append(("#" * int(lvl[1]) if lvl.lower() != "title" else "title:") + " " + txt)
         return "\n".join(out)
-    return "\n".join(line for line in t.splitlines() if re.match(r"^#{1,4}\s", line))
+    return "\n".join(line for _, level, line in wf.headings(t) if level <= 4)
 
 
 def package_rules() -> list[str]:
@@ -73,10 +63,11 @@ def package_rules() -> list[str]:
 
 
 def refs_in(text: str) -> list[tuple[str, str]]:
-    seen: dict[tuple[str, str], None] = {}
+    """Cited (kind, number) pairs in order; `FR-1` and `FR-01` are the same reference (first spelling kept)."""
+    seen: dict[tuple[str, int], str] = {}
     for kind, num in REF_RX.findall(text):
-        seen[(kind, num)] = None
-    return list(seen)
+        seen.setdefault((kind, int(num)), num)
+    return [(kind, num) for (kind, _), num in seen.items()]
 
 
 def expand(pattern: str, ids: list[str], dep: str | None = None) -> str:
@@ -130,13 +121,16 @@ def budget_data(step: str, ids: list[str]) -> dict:
                 paths += PATH_RX.findall(text)
                 arch += ARCH_RX.findall(text)
     sections = []
-    for kind, num in dict.fromkeys(refs):
+    unique: dict[tuple[str, int], tuple[str, str]] = {}
+    for kind, num in refs:  # across files too: FR-1 in the Story, FR-01 in the Analysis
+        unique.setdefault((kind, int(num)), (kind, num))
+    for kind, num in unique.values():
         if kind == "ADR":
             hit = wf.matches(f"reference/architecture/ADR-{int(num):03d}*.md") or wf.matches(f"reference/architecture/ADR-{num}*.md")
             sections.append({"ref": f"ADR-{num}", "file": wf.rel(hit[0]) if hit else None, "text": None})
             continue
         f = REQ_FILES[kind]
-        sec = section(wf.read(f), rf"\b{kind}-{num}\b") if wf.exists(f) else None
+        sec = section(wf.read(f), rf"\b{kind}-0*{int(num)}\b") if wf.exists(f) else None
         sections.append({"ref": f"{kind}-{num}", "file": f, "text": sec})
     # files and architecture sections cited by path in the Story (e.g. notes)
     arch = list(dict.fromkeys(arch))
@@ -171,8 +165,11 @@ def budget_data(step: str, ids: list[str]) -> dict:
     cap = cfg.get("run_max", 80)
     runs = []
     for cmd in cfg.get("run", []):
-        res = subprocess.run(cmd, shell=True, cwd=wf.ROOT, capture_output=True, text=True)
-        lines = (res.stdout + res.stderr).strip().splitlines()
+        try:  # commands come from workflow/workflow.toml (repository config), hence a shell
+            res = subprocess.run(cmd, shell=True, cwd=wf.ROOT, capture_output=True, text=True, timeout=RUN_TIMEOUT)
+            lines = (res.stdout + res.stderr).strip().splitlines()
+        except subprocess.TimeoutExpired:
+            lines = [f"(timed out after {RUN_TIMEOUT}s)"]
         runs.append({"cmd": cmd, "output": "\n".join(lines[:cap]), "truncated": max(0, len(lines) - cap)})
 
     inline = sum(len(x["text"] or "") for x in sections) + sum(len(x["text"] or "") for x in excerpts) + sum(len(x["output"]) for x in runs)
@@ -218,6 +215,16 @@ def budget(step: str, ids: list[str]) -> str:
 
 
 def main() -> None:
+    try:
+        run()
+    except (OSError, ValueError) as e:  # unreadable or malformed files (tomllib errors are ValueErrors naming the file)
+        if "--json" not in sys.argv:
+            raise
+        print(json.dumps({"schema": wf.SCHEMA, "error": {"code": "bad_input", "message": str(e)}}, ensure_ascii=False))
+        sys.exit(1)
+
+
+def run() -> None:
     a = [x for x in sys.argv[1:] if x != "--json"]
     as_json = "--json" in sys.argv
     if not a or a[0] in ("-h", "--help"):
@@ -241,7 +248,7 @@ def main() -> None:
         else:
             print(repo_map.repo_map())
     else:
-        ids = [x.replace("-", "") if re.fullmatch(r"[A-Z]+-?\d{4}", x) else x for x in a[1:]]
+        ids = [wf.norm_id(x) if re.fullmatch(r"[A-Za-z]+-?\d{4}", x) else x for x in a[1:]]
         if as_json:
             wf.dump_json(budget_data(a[0], ids))
         else:

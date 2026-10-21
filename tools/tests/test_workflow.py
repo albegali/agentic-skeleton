@@ -10,6 +10,9 @@ import tempfile
 import unittest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if os.environ.get("WF_TEST_TIMEOUT"):  # CI: a hung suite dumps every thread's stack (naming the test) and exits
+    import faulthandler
+    faulthandler.dump_traceback_later(float(os.environ["WF_TEST_TIMEOUT"]), exit=True)
 sys.path.insert(0, os.path.join(SRC, "tools"))
 from init_project import set_key  # noqa: E402
 
@@ -103,8 +106,13 @@ class Repo:
             p = set_key(p, section, key, value)
         self.write("project.toml", p)
 
-    def run(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True)
+    def run(self, *args: str, ok: bool = True, timeout: float | None = None) -> subprocess.CompletedProcess:
+        try:
+            r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                               timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            out = [x.decode("utf-8", "replace") if isinstance(x, bytes) else x or "" for x in (e.stdout, e.stderr)]
+            raise AssertionError(f"{args} timed out after {timeout}s:\n{out[0]}\n{out[1]}") from None
         if ok and r.returncode != 0:
             raise AssertionError(f"{args} failed:\n{r.stdout}\n{r.stderr}")
         return r
@@ -364,6 +372,151 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("DM0199", r.read("PLAN.md"))
 
 
+class EdgeCaseTest(unittest.TestCase):
+    """Malformed or unusual input found by edge-case probing (issue #10)."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def test_init_project_rerun_keeps_valid_toml(self):
+        r = self.r
+        r.run("tools/init_project.py", "--name", 'Acme "Next" Portal', "--prefix", "DM", "--owner", "PO")
+        r.run("tools/init_project.py", "--name", "Acme Portal", "--prefix", "DM", "--owner", "PO")
+        import tomllib
+        self.assertEqual(tomllib.loads(r.read("project.toml"))["project"]["name"], "Acme Portal")
+        bad = r.run("tools/init_project.py", "--name", "x", "--prefix", "dm", ok=False)
+        self.assertIn("--prefix", bad.stderr)
+
+    def test_frontmatter_parsing(self):
+        import wf
+        self.assertIsNone(wf.front("---\nstatus:\ntitle: x\n---\n", "status"))  # empty value: not the next line's
+        self.assertEqual(wf.front('---\nstatus: "approved"  # note\n---\n', "status"), "approved")
+        self.assertEqual(wf.front("---\nstatus: 'refined'\n---\n", "status"), "refined")
+        self.assertIsNone(wf.front("# Title\nstatus: approved\n", "status"))  # body line, no frontmatter
+        self.assertIsNone(wf.front("---\ntitle: x\n---\nstatus: approved\n", "status"))
+        r = self.r
+        r.through_inception()
+        r.write("reference/product/vision.md", '---\nstatus: "approved"\n---\n# Vision\n')
+        self.assertEqual(r.next()["phase"], "delivery")
+
+    def test_code_fences_are_not_headings(self):
+        import wf
+        fr = "### FR-01 — Install\n- **Statement**: x\n```bash\n# install deps\nmake setup\n```\n- **Priority**: Must\n### FR-02 — Next\n"
+        sec = wf.heading_section(fr, r"\bFR-0*1\b")
+        self.assertIn("**Priority**: Must", sec)
+        self.assertNotIn("FR-02", sec)
+        r = self.r
+        r.write("notes.md", fr)
+        self.assertNotIn("# install deps", r.run("tools/context.py", "--index", "notes.md").stdout)
+
+    def test_fr_number_spellings_are_one_reference(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        r.write("analysis/10-stories/STORY_DM0102_export.md", "# Export\nCites FR-2 and FR-02.\n")
+        ctx = json.loads(r.run("tools/context.py", "analysis", "dm0102", "--json").stdout)
+        self.assertEqual(ctx["ids"], ["DM0102"])
+        self.assertEqual([s["ref"] for s in ctx["sections"]], ["FR-2"])
+        self.assertIn("Export", ctx["sections"][0]["text"])
+
+    def test_task_id_ranges(self):
+        import wf
+        i = "DM0101"
+        self.assertEqual(wf.task_ids("TSK-DM0101-01 - 03", i), {f"TSK-{i}-0{n}" for n in (1, 2, 3)})
+        self.assertEqual(wf.task_ids("TSK-DM0101-02 to TSK-DM0101-04", i), {f"TSK-{i}-0{n}" for n in (2, 3, 4)})
+        self.assertEqual(wf.task_ids("TSK-DM0101-01 – TSK-DM0101-02", i), {f"TSK-{i}-01", f"TSK-{i}-02"})
+        self.assertEqual(wf.task_ids("TSK-DM0101-03 — 2 files changed", i), {f"TSK-{i}-03"})
+
+    def test_rename_id_is_whole_word_and_validated(self):
+        r = self.r
+        r.through_inception()
+        r.write("backlog/stories.toml", r.read("backlog/stories.toml").replace("DM0102", "DM0120"))
+        r.write("PLAN.md", r.read("PLAN.md").replace("DM0102", "DM0120"))
+        r.run("tools/gen_backlog.py")
+        self.assertIn("unknown ID", r.run("tools/rename_id.py", "DM0112", "DM0199", ok=False).stderr)
+        self.assertIn("not a story ID", r.run("tools/rename_id.py", "DM012", "DM0199", ok=False).stderr)
+        self.assertIn("already exists", r.run("tools/rename_id.py", "DM0101", "DM0120", ok=False).stderr)
+        self.assertIn("not a story ID", r.run("tools/rename_id.py", "DM0101", "21890", ok=False).stderr)
+        before = r.read("backlog/stories.toml")
+        self.assertIn("rename analysis/10-stories/STORY_DM0120_export.md", r.run("tools/rename_id.py", "DM0120", "DM0130", "--dry-run").stdout)
+        self.assertEqual(r.read("backlog/stories.toml"), before)
+        r.run("tools/rename_id.py", "DM0101", "DM0110")
+        st = r.read("backlog/stories.toml")
+        self.assertIn('id = "DM0110"', st)
+        self.assertIn('id = "DM0120"', st)  # DM0101 → DM0110 leaves DM0120 alone
+        self.assertTrue(os.path.exists(os.path.join(r.dir, "analysis/10-stories/STORY_DM0110_walking_skeleton.md")))
+        r.run("tools/check_workflow.py")
+
+    def test_bad_input_envelopes_name_the_file(self):
+        r = self.r
+        r.through_inception()
+        for content in ("[[story]\nid = ", '[[story]]\nepic = "EP-01"\n'):
+            r.write("backlog/stories.toml", content)
+            for args, tool in ((["tools/next_step.py", "--json"], "next"), (["tools/next_step.py", "DM0101", "--json"], "next-story"),
+                               (["tools/gen_backlog.py", "--json"], "backlog")):
+                p = r.run(*args, ok=False)
+                self.assertNotEqual(p.returncode, 0, args)
+                env = json.loads(p.stdout)
+                self.assertEqual((env["tool"], env["error"]["code"]), (tool, "bad_input"))
+                self.assertIn("backlog/stories.toml", env["error"]["message"])
+            p = r.run("tools/context.py", "analysis", "DM0101", "--json", ok=False)
+            self.assertEqual(json.loads(p.stdout)["error"]["code"], "bad_input")
+
+    def test_lowercase_ids_and_refined_outcome_codes(self):
+        r = self.r
+        r.through_inception()
+        r.write("analysis/20-analysis/ANALYSIS_DM0101_walking_skeleton.md", ANALYSIS_MD.format(i="DM0101"))
+        refined = "---\nstatus: refined\n---\n# Refined\n## 8. Refinement Outcome\n- `{}` Storia {}\n"
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md", refined.format("not-ready", "non pronta"))
+        self.assertEqual(r.next("dm-0101")["step"], "workshop")
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md", refined.format("ready", "pronta per il Brief"))
+        self.assertEqual(r.next("dm0101")["step"], "brief-spec")
+
+    def test_run_file_without_suffix_wins(self):
+        r = self.r
+        r.through_inception()
+        r.write("delivery/30-runs/RUN-DM0101.md", RUN.format(i="DM0101", st="Closed", plan="x", ok="x"))
+        r.write("delivery/30-runs/RUN-DM0101-addendum.md", RUN.format(i="DM0101", st="Draft", plan="x", ok=" "))
+        self.assertEqual(r.next("DM0101")["step"], "done")
+
+    def test_story_sentences_follow_the_project_language(self):
+        r = self.r
+        r.through_inception()  # language it
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('slug = "export"', 'slug = "export"\nas_a = "PO"\ni_want = "x"\nso_that = "y"'))
+        r.run("tools/gen_backlog.py")
+        body = r.read("analysis/10-stories/STORY_DM0102_export.md")
+        self.assertIn("Come PO, voglio x, in modo da y.", body)
+        self.assertIn("Dato a, quando b, allora c.", body)
+        self.assertIn("## Acceptance Criteria", body)  # headings stay English
+
+    def test_text_output_on_a_cp1252_console(self):
+        r = self.r
+        r.through_inception()
+        r.env = {**r.env, "PYTHONIOENCODING": "cp1252"}
+        self.assertIn("→", r.run("tools/next_step.py").stdout)
+        for args in (["tools/next_step.py"], ["tools/context.py", "analysis", "DM0101"], ["tools/check_workflow.py"]):
+            r.run(*args)  # no UnicodeEncodeError
+
+    def test_weekly_due(self):
+        r = self.r
+        r.through_inception()
+        self.assertTrue(r.next()["weekly_due"])  # initialized, no weekly yet
+        import datetime as dt
+        r.write(f"project-journal/weekly/{dt.date.today().isoformat()}.md", "# Week\n")
+        self.assertFalse(r.next()["weekly_due"])
+        r.write("project-journal/weekly/2000-01-01.md", "# Old\n")  # older files do not count
+        self.assertFalse(r.next()["weekly_due"])
+
+    def test_invalid_settings_json_is_reported(self):
+        r = self.r
+        r.write(".claude/settings.json", "{not json")
+        out = r.run("tools/render_agents.py", ok=False)
+        self.assertIn("invalid JSON", out.stderr)
+
+
 LEGACY = {  # a 10-year-old AngularJS frontend, no backend, its own rules and tooling
     "bower.json": '{"name": "legacy", "dependencies": {"angular": "1.5.8"}}',
     "Gruntfile.js": "module.exports = function (grunt) {};\n",
@@ -398,10 +551,11 @@ class LaunchTest(unittest.TestCase):
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         self.r.write("serve_once.py", "import http.server as h, sys\n"
-                     f"h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler).handle_request()\n")
+                     f"s = h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler)\n"
+                     "print('app listening', flush=True)\ns.handle_request()\nprint('app served one request', flush=True)\n")
         self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" serve_once.py')
         self.r.toml_set("project.toml", "stack", "url", f"http://127.0.0.1:{port}/")
-        out = self.r.run("tools/launch.py", "--timeout", "20")
+        out = self.r.run("tools/launch.py", "--timeout", "120", timeout=180)  # a cold macOS runner needs >20 s to start python; never hang
         self.assertIn(f"http://127.0.0.1:{port}/", out.stdout)
 
     def test_returns_the_app_exit_code(self):
@@ -430,13 +584,13 @@ class AdoptTest(unittest.TestCase):
         shutil.rmtree(self.t, ignore_errors=True)
 
     def adopt(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, "tools/adopt.py", self.t, *a], cwd=self.r.dir, env=self.env, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, "tools/adopt.py", self.t, *a], cwd=self.r.dir, env=self.env, capture_output=True, text=True, encoding="utf-8")
         if ok and r.returncode != 0:
             raise AssertionError(f"adopt failed:\n{r.stdout}\n{r.stderr}")
         return r
 
     def tool(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *a], cwd=self.t, env=self.env, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, *a], cwd=self.t, env=self.env, capture_output=True, text=True, encoding="utf-8")
         if ok and r.returncode != 0:
             raise AssertionError(f"{a} failed:\n{r.stdout}\n{r.stderr}")
         return r
@@ -453,6 +607,14 @@ class AdoptTest(unittest.TestCase):
         out = self.adopt("--dry-run").stdout
         self.assertIn("dry run", out)
         self.assertFalse(os.path.exists(os.path.join(self.t, "project.toml")))
+
+    def test_invalid_arguments_fail_before_copying(self):
+        for args in (("--prefix", "ma", "--dry-run"), ("--prefix", "ma"), ("--language", "Italian"), ("--tools", "vim")):
+            out = self.adopt(*args, ok=False)
+            self.assertNotEqual(out.returncode, 0, args)
+            self.assertIn(f"--{args[0][2:]}", out.stderr)
+            self.assertFalse(os.path.exists(os.path.join(self.t, "project.toml")), args)
+            self.assertFalse(os.path.exists(os.path.join(self.t, "tools/wf.py")), args)
 
     def test_adopt_keeps_the_project_files_and_starts_with_onboard(self):
         self.adopt("--name", "Legacy Shop", "--tools", "claude-code,copilot")

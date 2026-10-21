@@ -1,8 +1,15 @@
 name: workflow-check
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]  # branches are checked through their pull request: one run per commit, not two
+  pull_request:
+concurrency:  # a newer commit on the same PR (or main) cancels the run of the older one
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.11", "3.14"]  # baseline and latest; the tools stay stdlib-only
@@ -15,8 +22,11 @@ jobs:
       - run: python -m pip install jsonschema  # test dependency only
       - run: make check
       - run: make test-tools
-  portal-launcher:  # tools/portal.py on the other OSes of NFR-10 (Linux is covered above)
+  other-os:  # all tools tests on the other OSes (NFR-10; Linux is covered above): paths, console encoding, launcher
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      WF_TEST_TIMEOUT: "300"  # seconds: a hang dumps the stacks instead of running until the job timeout
     strategy:
       fail-fast: false
       matrix:
@@ -25,4 +35,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }  # launcher baseline
-      - run: python -m unittest discover -s tools/tests -p test_portal.py -v
+      - run: python -m unittest discover -s tools/tests -v

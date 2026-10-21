@@ -18,6 +18,11 @@ import urllib.request
 import webbrowser
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+for _s in (sys.stdout, sys.stderr):  # prints → : a cp1252 console (Windows) must not crash
+    try:
+        _s.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
 
 
 def stack() -> dict:
@@ -25,11 +30,14 @@ def stack() -> dict:
         return tomllib.load(f).get("stack", {})
 
 
+LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # the app runs here: never ask a system proxy (macOS)
+
+
 def wait_for(url: str, proc: subprocess.Popen, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and proc.poll() is None:
         try:
-            urllib.request.urlopen(url, timeout=2).close()
+            LOCAL.open(url, timeout=2).close()
             return True
         except urllib.error.HTTPError:
             return True  # it answers, even if not 2xx

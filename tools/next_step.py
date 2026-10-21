@@ -66,11 +66,7 @@ def inception() -> dict | None:
 
 def stage(i: str) -> tuple[str, str, str]:
     """(stage, detail, owner) — owner: agent | human | done."""
-    analysis = wf.one(f"analysis/20-analysis/ANALYSIS_{i}_*.md")
-    refined = wf.one(f"analysis/30-refined/REFINED_{i}_*.md")
-    int_ = wf.one(f"delivery/10-briefs/BRIEF-{i}-*.md")
-    spec = wf.one(f"delivery/20-specs/SPEC-{i}-*.md")
-    run = wf.one(f"delivery/30-runs/RUN-{i}.md") or wf.one(f"delivery/30-runs/RUN-{i}*.md")
+    analysis, refined, brief, spec, run = (wf.find(k, i) for k in ("analysis", "refined", "brief", "spec", "run"))
     if run:
         t = wf.read(run)
         st = wf.md_status(t) or "Draft"
@@ -95,13 +91,12 @@ def stage(i: str) -> tuple[str, str, str]:
         if st == "Blocked":
             return ("blocked", "Spec blocked", "human")
         return ("run-strategy", f"Spec {st}, RUN missing", "agent")
-    if int_:
+    if brief:
         return ("brief-spec", "Brief present, Spec missing", "agent")
     if refined:
         t = wf.read(refined)
         st = wf.front(t, "status") or "draft"
-        outcome = t.split("## 8.")[-1].lower() if "## 8." in t else ""
-        if "not ready" in outcome and "ready for brief" not in outcome:
+        if refined_not_ready(t):
             return ("workshop", "Refined Story 'not ready': another refinement is needed", "human")
         if st in ("refined", "approved"):
             return ("brief-spec", f"Refined Story {st}: ready for the Brief", "agent")
@@ -110,6 +105,14 @@ def stage(i: str) -> tuple[str, str, str]:
         st = wf.front(wf.read(analysis), "status") or "draft"
         return ("workshop", f"Analysis {st}: workshop needed, then the Refined Story with its evidence", "human")
     return ("analysis", "no artifact yet", "agent")
+
+
+def refined_not_ready(text: str) -> bool:
+    """Refined §8 outcome is `not-ready` (code kept in English, any language around it); legacy English line accepted."""
+    outcome = (wf.heading_section(text, r"^##\s+8\.") or "").lower()
+    if re.search(r"`(ready|ready-with-open-points|not-ready)`", outcome):
+        return "`not-ready`" in outcome
+    return "not ready" in outcome and "ready for brief" not in outcome
 
 
 def deps_done(i: str) -> bool:
@@ -158,11 +161,15 @@ def recommend(plan: list[dict]) -> dict:
 
 
 def weekly_due() -> bool:
-    files = wf.matches("project-journal/weekly/*.md")
-    if not files:
+    """The latest weekly (date in the file name, README excluded) is 7 or more days old, or there is none yet."""
+    dates = [m.group(1) for p in wf.matches("project-journal/weekly/*.md")
+             if (m := re.search(r"(\d{4}-\d{2}-\d{2})", os.path.basename(p)))]
+    if not dates:
         return wf.project().get("project", {}).get("initialized", False)
-    m = re.search(r"(\d{4}-\d{2}-\d{2})", os.path.basename(files[-1]))
-    return not m or (dt.date.today() - dt.date.fromisoformat(m.group(1))).days >= 7
+    try:
+        return (dt.date.today() - dt.date.fromisoformat(max(dates))).days >= 7
+    except ValueError:  # 2026-13-45
+        return True
 
 
 def step_info(step: str) -> dict:
@@ -178,9 +185,17 @@ def command_for(step: str, ids: list[str]) -> str:
 
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    as_json = "--json" in sys.argv
+    try:
+        run(args, "--json" in sys.argv)
+    except (OSError, ValueError) as e:  # unreadable or malformed files (tomllib errors are ValueErrors naming the file)
+        if "--json" not in sys.argv:
+            raise
+        wf.fail_envelope("next-story" if args else "next", "bad_input", str(e))
+
+
+def run(args: list[str], as_json: bool) -> None:
     if args:
-        i = args[0].replace("-", "")
+        i = wf.norm_id(args[0])
         st = wf.stories()
         if i not in st:
             if as_json:

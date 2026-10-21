@@ -28,7 +28,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import repo_map  # noqa: E402
-from init_project import TOOLS, set_key  # noqa: E402
+from init_project import TOOLS, set_key, validate  # noqa: E402
 from render_agents import BEGIN, END  # noqa: E402
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -56,7 +56,8 @@ def skeleton_files() -> list[str]:
     try:
         files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=SRC, capture_output=True, text=True, check=True).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError):
-        files = [os.path.relpath(os.path.join(d, n), SRC) for d, _, ns in os.walk(SRC) for n in ns if "/.git/" not in d + "/"]
+        files = [os.path.relpath(os.path.join(d, n), SRC).replace(os.sep, "/") for d, _, ns in os.walk(SRC) for n in ns
+                 if f"{os.sep}.git{os.sep}" not in d + os.sep]  # not a git checkout: same `/` paths as git ls-files
     return sorted(f for f in files if f not in NOT_INSTALLED and any(seg_match(f, p) for p in INSTALL))
 
 
@@ -163,6 +164,8 @@ def main() -> None:
     name = a.name or os.path.basename(dst)
     prefix = a.prefix or default_prefix(name)
     owner = a.owner if a.owner is not None else git_out(dst, "config", "user.name")
+    if err := validate(prefix, a.language, [t.strip() for t in a.tools.split(",") if t.strip()]):  # before anything is copied
+        sys.exit(err + ("" if a.prefix else f" (derived from the name '{name}': pass --prefix)"))
 
     # ---- plan
     copy, skipped, conflicts = [], [], []
