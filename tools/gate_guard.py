@@ -38,6 +38,8 @@ SHELL_DENY = [
     (AT + r"git\s+push\b" + ARGS + r"\s\+\S", "no forced refspec (+branch)"),
     (AT + r"git\s+push\b" + ARGS + r"\s:\S", "no remote branch deletion (:branch)"),
     (AT + r"git\s+branch\b" + ARGS + r"\s(-D|--delete\s+--force)\b", "no forced branch deletion"),
+    (AT + r"git\s+(?:switch\s+(?:-c|--create)|checkout\s+-[bB]|branch(?!\s+(?:-[dD]|--delete)\b))\b" + ARGS + r"\s(?:origin/)?(?:release|releases|develop|development|dev|staging|integration|next)(?:[/_.-]\S*)?(?=\s|$)",
+     "trunk-based development: no long-lived branches (release/develop/staging/integration); a release is a tag on main"),
     (AT + r"git\s+reset\b" + ARGS + r"\s--hard\b", "no hard reset"),
     (AT + r"git\s+(?:filter-branch|filter-repo)\b|" + AT + r"git\s+rebase\b" + ARGS + r"\s(-i|--root)\b", "no history rewrite"),
     (AT + r"gh\s+pr\s+merge\b" + ARGS + r"\s--admin\b", "never bypass branch protection"),

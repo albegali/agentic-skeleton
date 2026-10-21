@@ -191,6 +191,35 @@ def story_branches() -> dict[str, list[dict]]:
     return out
 
 
+def stale_branches(max_days: int | None = None) -> list[dict]:
+    """Trunk-based development: branches (local and remote, not main, not spikes) whose oldest commit not yet in main is
+    older than `[git] max_branch_age_days` (default 3): [{"branch", "days", "commits"}], oldest first."""
+    import subprocess
+    if max_days is None:
+        max_days = int(project().get("git", {}).get("max_branch_age_days", 3))
+    def git(*a: str) -> str | None:
+        try:
+            r = subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return r.stdout if r.returncode == 0 else None
+    trunk = next((t for t in ("origin/main", "main") if git("rev-parse", "--verify", "-q", t) is not None), None)
+    refs = git("for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes")
+    if not trunk or refs is None:
+        return []
+    seen, out, now = set(), [], dt.datetime.now().timestamp()
+    for ref in refs.split():
+        short = ref.split("/", 1)[1] if ref.startswith("origin/") else ref
+        if short in ("main", "HEAD", "origin") or short.startswith(("spike/", "backup/")) or short in seen:
+            continue
+        seen.add(short)
+        times = git("log", f"{trunk}..{ref}", "--format=%ct")
+        times = times.split() if times else []
+        if times and (days := int((now - int(times[-1])) // 86400)) > max_days:
+            out.append({"branch": short, "days": days, "commits": len(times)})
+    return sorted(out, key=lambda b: -b["days"])
+
+
 def claims() -> dict[str, dict]:
     """Who works on which story: `claimed_by` / `claimed_at` in stories.toml, else the author of its story branch."""
     out = {}

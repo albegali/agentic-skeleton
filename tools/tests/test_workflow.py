@@ -1067,11 +1067,31 @@ class GateTest(unittest.TestCase):
         self.assertEqual(self.guard("Write", w("src/app.py"), review).returncode, 2)
         self.assertEqual(self.guard("Write", w("src/app.py"), "<command-name>/run</command-name>").returncode, 0)
         for cmd, code in (("make approve ID=DM0101 GATE=spec", 2), ("git push --force-with-lease", 2), ("gh pr merge 4 --admin --squash", 2),
-                          ("cat .env", 2), ("git push -u origin dm0101-x", 0), ("python3 - <<'EOF'\nprint('make approve')\nEOF", 0)):
+                          ("cat .env", 2), ("git switch -c release/1.17.0", 2), ("git checkout -b develop", 2), ("git branch staging", 2),
+                          ("git switch -c pr0101-login", 0), ("git branch -d release/1.16.0", 0), ("git branch --list", 0), ("git push -u origin dm0101-x", 0), ("python3 - <<'EOF'\nprint('make approve')\nEOF", 0)):
             self.assertEqual(self.guard("Bash", {"command": cmd}).returncode, code, cmd)
 
     def git(self, *a: str) -> str:
         return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
+
+    def test_stale_branches_are_reported_by_check_and_next(self):
+        r = self.r
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Pat Owner")
+        self.git("config", "user.email", "pat@example.org")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("switch", "-qc", "dm0101-old")
+        old = "2020-01-01T00:00:00"
+        subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "old work", "--date", old], cwd=r.dir, check=True,
+                       env={**r.env, "GIT_COMMITTER_DATE": old})
+        self.git("switch", "-q", "main")
+        self.git("switch", "-qc", "dm0102-fresh")
+        self.git("commit", "-q", "--allow-empty", "-m", "fresh work")
+        self.git("switch", "-q", "main")
+        out = r.run("tools/check_workflow.py").stdout
+        self.assertIn("branch dm0101-old", out)
+        self.assertNotIn("dm0102-fresh", out)
 
     def test_make_approve_commits_the_gate_alone_and_ci_checks_the_order(self):
         r, i = self.r, self.i
