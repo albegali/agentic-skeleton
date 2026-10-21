@@ -37,3 +37,6 @@ out_of_scope = "Domain features."
 # skip_analysis = true      # straight to /brief, no Analysis or workshop (default: true for bug, hotfix, chore, refactor, spike, XS)
 # supersedes = "PR0102"     # replaces that story (a closed one: post-closure change; an open one: set it superseded)
 # split_from = "PR0103"     # split off that story during delivery
+
+# Gates
+# (changes requested at a human gate are recorded here, one line each)

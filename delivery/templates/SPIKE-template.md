@@ -53,3 +53,9 @@ Proposed entries for `backlog/stories.toml` (added by `/backlog` after acceptanc
 # 6. Open Questions
 
 - …
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

@@ -114,3 +114,9 @@ Facts written by `/persist` before Done (no checkboxes):
 ## Revisions
 
 > One line per change after approval or closure: date, what, source (minutes, owner decision, commit).
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/gates.schema.json",
+  "title": "gates.py list|approve|request-changes --json",
+  "type": "object",
+  "required": ["contract", "tool", "data"],
+  "additionalProperties": true,
+  "properties": {
+    "contract": {"$ref": "envelope.schema.json#/$defs/contract"},
+    "tool": {"const": "gates"},
+    "data": {
+      "anyOf": [
+        {
+          "description": "list: every pending human gate (empty list when none)",
+          "type": "object",
+          "required": ["gates"],
+          "properties": {
+            "gates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "gate", "artifact", "field", "current", "proposed", "since", "age_days"],
+                "properties": {
+                  "id": {"type": "string", "minLength": 1},
+                  "gate": {"type": "string", "minLength": 1},
+                  "artifact": {"type": "string", "minLength": 1},
+                  "field": {"type": "string"},
+                  "current": {"type": "string"},
+                  "proposed": {"type": "string"},
+                  "story_id": {"type": "string"},
+                  "since": {"type": "string"},
+                  "age_days": {"type": "integer", "minimum": 0}
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "description": "approve / request-changes: what was applied",
+          "type": "object",
+          "required": ["id", "gate", "changed", "diff", "commit", "by", "at"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "gate": {"type": "string", "minLength": 1},
+            "changed": {"type": "array", "items": {"type": "string"}},
+            "diff": {"type": "string"},
+            "commit": {"type": ["string", "null"]},
+            "by": {"type": "string"},
+            "at": {"type": "string"},
+            "comment": {"type": "string"}
+          },
+          "additionalProperties": true
+        }
+      ]
+    }
+  }
+}

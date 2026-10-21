@@ -27,3 +27,9 @@ last_updated: YYYY-MM-DD
 
 ## Conflicts between sources
 - …
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

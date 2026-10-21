@@ -104,3 +104,9 @@ Only the residual points to carry into the Brief or to handle before intake. Say
 
 > One line per change after `refined`: date, what, source.
 ```
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

@@ -52,3 +52,9 @@ For <users> who <need>, <product> is a <category> that <key benefit>. Unlike <cu
 
 ## 10. Open questions
 - …
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.
