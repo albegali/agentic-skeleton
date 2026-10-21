@@ -1154,6 +1154,13 @@ class GateTest(unittest.TestCase):
         msgs = " ".join(x["message"] for x in issues)
         self.assertIn(f"RUN-{i}: code committed with the strategy approval", msgs)
         self.assertIn("has no `Approved-by:` trailer", msgs)
+        # the RUN approved on main already: a later branch (e.g. a skeleton upgrade) is not tied to its approval
+        self.git("update-ref", "refs/heads/main", "HEAD")
+        r.write("tools/extra.py", "print('upgrade')\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "later code")
+        later = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
+        self.assertFalse([x for x in later if "strategy approval" in x["message"]], later)
 
     def test_hook_is_rendered_once_and_kept_next_to_the_projects_own(self):
         r = self.r
