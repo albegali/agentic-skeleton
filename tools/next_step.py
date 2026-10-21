@@ -350,6 +350,8 @@ def run(args: list[str], as_json: bool) -> None:
             rec["claimable"] = claimable(wf.sprints(), me)
     rec["phase"] = phase
     rec["weekly_due"] = weekly_due()
+    rec["pending"] = [{"id": os.path.basename(p)[4:].split(".")[0], "action": a} for p in wf.matches("delivery/30-runs/RUN-*.md")
+                      for a in wf.pending_actions(wf.read(p))]
     info = step_info(rec["step"])
     rec["tier"] = "deep" if deep(rec["step"], rec["ids"]) else info.get("tier")
     rec["models"] = {k: wf.model_for(k, rec["tier"]) for k in wf.enabled_tools()} if rec["tier"] else {}
@@ -398,6 +400,10 @@ def run(args: list[str], as_json: bool) -> None:
     if rec.get("optional"):
         print(f"  In parallel (analysis ahead): /analysis {' '.join(rec['optional']['ids'])}")
     print(f"  Step file: workflow/steps/{rec['step']}.md")
+    if rec["pending"]:
+        print("\nPending owner actions (RUN `## Pending owner actions`):")
+        for x in rec["pending"]:
+            print(f"  {x['id']}: {x['action']}")
     if rec["weekly_due"]:
         print("\n(reminder) The weekly journal is older than 7 days: /weekly")
 

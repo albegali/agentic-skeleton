@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -353,6 +354,27 @@ class WorkflowTest(unittest.TestCase):
         r.run("tools/render_agents.py")
         self.assertEqual(r.read(".codex/config.toml"), 'model = "my-own"\n')
         r.run("tools/check_workflow.py")
+
+    def test_pending_owner_actions_changelog_and_upstream(self):
+        r, i = self.r, "DM0101"
+        check = lambda: EdgeCaseTest.check(self, False)  # noqa: E731
+        r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nrepo = "skeleton"', 1))
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        run = (RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 9. Outcome\nGoal achieved:\n- [x] Yes\n- [ ] Partial\n" + review
+               + "## Pending owner actions\n- [ ] tag v1.2.0 — owner: PO — since: 2026-10-20\n- [x] release notes — owner: PO — since: 2026-10-20\n")
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        self.assertEqual(r.next()["pending"], [{"id": i, "action": "tag v1.2.0 — owner: PO — since: 2026-10-20"}])
+        errors, warnings = check()
+        self.assertIn(f"RUN-{i}: Closed with Goal achieved `Yes` while owner actions are pending: tag v1.2.0 — owner: PO — since: 2026-10-20 (use Partial, or do them)", errors)
+        self.assertIn(f"RUN-{i}: story in repo 'skeleton': record the upstream commit or tag in RUN References `Upstream:`", warnings)
+        r.write("tools/VERSION", "99.0.0\n")
+        r.toml_set("project.toml", "skeleton", "version", "98.0.0")
+        errors, warnings = check()
+        self.assertIn("tools/CHANGELOG.md has no `## 99.0.0` entry for tools/VERSION", errors)
+        self.assertTrue(any("[skeleton] version 98.0.0 but the workflow files are 99.0.0" in w for w in warnings))
 
     def test_stale_adapter_detected(self):
         with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
@@ -1222,6 +1244,73 @@ class TeamTest(unittest.TestCase):
         with open(os.path.join(wt, "backlog/stories.toml"), encoding="utf-8") as f:
             self.assertIn('claimed_by = "Ada"', f.read())
         self.assertEqual(r.next("--me", "Bob")["claimable"], ["DM0101"])
+
+
+class UpgradeTest(unittest.TestCase):
+    """make sync-skeleton / adopt.py --upgrade: a 3-way merge against the version the project records."""
+
+    def setUp(self) -> None:
+        self.skel = Repo()  # the skeleton at 9.0.0, then 9.1.0
+        self.addCleanup(self.skel.cleanup)
+        s = self.skel
+        s.write("tools/VERSION", "9.0.0\n")
+        s.write("tools/CHANGELOG.md", "# Skeleton changelog\n\n## 9.0.0\n- base\n")
+        for a in (("init", "-q", "-b", "main"), ("config", "user.name", "S"), ("config", "user.email", "s@example.org"),
+                  ("add", "-A"), ("commit", "-qm", "9.0.0")):
+            self.git(s.dir, *a)
+        self.proj = tempfile.mkdtemp(prefix="wf-proj-")  # a project cloned at 9.0.0, then changed locally
+        self.addCleanup(shutil.rmtree, self.proj, True)
+        shutil.copytree(s.dir, self.proj, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+        self.edit(self.proj, "workflow/steps/weekly.md", "\nLocal note.\n")
+        # upstream changes for 9.1.0
+        self.edit(s.dir, "workflow/steps/close.md", "\nUpstream change.\n")
+        s.write("tools/VERSION", "9.1.0\n")
+        s.write("tools/CHANGELOG.md", "# Skeleton changelog\n\n## 9.1.0\n- next\n\n## 9.0.0\n- base\n")
+        s.write("project.toml", s.read("project.toml") + "\n[newsec]\nflag = true\n")
+        s.write("tools/migrations/9.0.0-9.1.0.py", "print('migrated')\n")
+        os.remove(os.path.join(s.dir, "workflow/steps/spike-review.md"))
+        for a in (("add", "-A"), ("commit", "-qm", "9.1.0")):
+            self.git(s.dir, *a)
+
+    @staticmethod
+    def git(cwd: str, *a: str) -> str:
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, check=True).stdout
+
+    @staticmethod
+    def edit(root: str, p: str, add: str) -> None:
+        with open(os.path.join(root, p), "a", encoding="utf-8") as f:
+            f.write(add)
+
+    def upgrade(self, ok: bool = True, *a: str) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k != "WF_ROOT"}
+        r = subprocess.run([sys.executable, os.path.join(self.skel.dir, "tools/adopt.py"), self.proj, "--upgrade", *a],
+                           capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode == 0, ok, r.stdout + r.stderr)
+        return r
+
+    def read(self, p: str) -> str:
+        with open(os.path.join(self.proj, p), encoding="utf-8") as f:
+            return f.read()
+
+    def test_upgrade_takes_upstream_keeps_local_changes_and_records_the_version(self):
+        out = self.upgrade(True, "--dry-run").stdout
+        self.assertIn("skeleton 9.0.0 → 9.1.0", out)
+        self.assertNotIn("Upstream change.", self.read("workflow/steps/close.md"))
+        out = self.upgrade().stdout
+        self.assertIn("Upstream change.", self.read("workflow/steps/close.md"))
+        self.assertIn("Local note.", self.read("workflow/steps/weekly.md"))
+        self.assertFalse(os.path.exists(os.path.join(self.proj, "workflow/steps/spike-review.md")))
+        self.assertIn("migration 9.0.0-9.1.0.py: migrated", out)
+        p = tomllib.loads(self.read("project.toml"))
+        self.assertEqual((p["skeleton"]["version"], p["newsec"]["flag"]), ("9.1.0", True))
+        self.assertEqual(self.read("tools/VERSION").strip(), "9.1.0")
+
+    def test_a_conflict_writes_nothing(self):
+        self.edit(self.proj, "workflow/steps/close.md", "\nLocal change too.\n")
+        out = self.upgrade(False).stdout
+        self.assertIn("Conflicts — nothing written", out)
+        self.assertIn("workflow/steps/close.md", out)
+        self.assertEqual(self.read("tools/VERSION").strip(), "9.0.0")
 
 
 class LaunchTest(unittest.TestCase):

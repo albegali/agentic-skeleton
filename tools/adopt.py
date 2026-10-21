@@ -4,6 +4,7 @@
   python3 tools/adopt.py ../my-app [--name "My App"] [--prefix MA] [--language en] [--owner "Jane Doe"]
                                    [--tools claude-code,codex,copilot,cursor] [--dry-run] [--allow-dirty]
   make adopt TARGET=../my-app ARGS="--prefix MA"
+  python3 tools/adopt.py ../my-app --upgrade [--dry-run]   # a project already on the workflow: upgrade (tools/upgrade.py)
 
 Deterministic, no LLM. It never overwrites a file of the target:
   - workflow files (tools, steps, templates, guides, project.toml, models.toml) are copied only where absent; an
@@ -38,8 +39,9 @@ INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/work
            "delivery/AGENTS.md", "delivery/AGENT_GUIDE.md", "delivery/guide/*", "delivery/templates/*", "delivery/*/.gitkeep",
            "delivery/20-specs/README.md", "reference/README.md", "reference/*/.gitkeep", "reference/*/*/.gitkeep",
            "project-journal/*.md", "project-journal/*/README.md", "project-journal/templates/*", "project-journal/*/.gitkeep",
-           "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json"]
-NOT_INSTALLED = {"tools/adopt.py"}  # the installer stays in the skeleton
+           "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json",
+           "tools/CHANGELOG.md", "tools/migrations/*.py"]
+NOT_INSTALLED = {"tools/adopt.py", "tools/upgrade.py"}  # the installer and the upgrader stay in the skeleton
 OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep|tasks\.json)$")  # on conflict: keep the target's file, skip ours
 MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json", ".codex/config.toml"}  # .codex/config.toml: kept as is
 DROP_TARGETS = {"adopt", "test-tools"}  # the tools tests copy the whole repository: not for an application repo
@@ -147,6 +149,7 @@ def main() -> None:
     ap.add_argument("--tools", default=",".join(TOOLS))
     ap.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     ap.add_argument("--allow-dirty", action="store_true", help="run even with uncommitted changes in the target")
+    ap.add_argument("--upgrade", action="store_true", help="the target already uses the workflow: upgrade it to this skeleton")
     a = ap.parse_args()
 
     dst = os.path.abspath(a.target)
@@ -154,9 +157,22 @@ def main() -> None:
         sys.exit(f"not a directory: {dst}")
     if dst == SRC or dst.startswith(SRC + os.sep):
         sys.exit("the target must be another repository, outside the skeleton")
-    if os.path.exists(os.path.join(dst, "project.toml")) and "[project]" in read(os.path.join(dst, "project.toml")) \
-            and os.path.exists(os.path.join(dst, "workflow/workflow.toml")):
-        sys.exit("the target already uses the workflow; to update it see docs/GUIDE.md §12")
+    uses = os.path.exists(os.path.join(dst, "project.toml")) and "[project]" in read(os.path.join(dst, "project.toml")) \
+        and os.path.exists(os.path.join(dst, "workflow/workflow.toml"))
+    if a.upgrade:
+        if not uses:
+            sys.exit("the target does not use the workflow yet: run without --upgrade to adopt it")
+        if os.path.isdir(os.path.join(dst, ".git")) and git_out(dst, "status", "--porcelain") and not a.allow_dirty:
+            sys.exit("the target has uncommitted changes: commit or stash them first, so the upgrade is one reviewable diff")
+        import upgrade
+        upgrade.upgrade(SRC, dst, skeleton_files(), read, lambda f: f not in NOT_INSTALLED and any(seg_match(f, p) for p in INSTALL), a.dry_run)
+        if not a.dry_run and os.path.exists(os.path.join(dst, "workflow.mk")):  # adopted with an own Makefile: regenerate its targets
+            mk = os.path.join(dst, "Makefile")
+            with open(os.path.join(dst, "workflow.mk"), "w", encoding="utf-8") as f:
+                f.write(workflow_mk(read(os.path.join(SRC, "Makefile")), make_targets(read(mk)) if os.path.exists(mk) else set(), "# Agentic workflow targets (installed by agentic-skeleton tools/adopt.py)."))
+        return
+    if uses:
+        sys.exit("the target already uses the workflow: upgrade it with --upgrade (or `make sync-skeleton` in the target)")
     if os.path.isdir(os.path.join(dst, ".git")) and git_out(dst, "status", "--porcelain") and not a.allow_dirty:
         sys.exit("the target has uncommitted changes: commit or stash them first, so the adoption is one reviewable diff "
                  "(or pass --allow-dirty)")
@@ -245,6 +261,8 @@ def main() -> None:
     for k, v in stack.items():
         p = set_key(p, "stack", k, v)
     p = set_key(p, "stack", "decided", False)
+    p = set_key(p, "skeleton", "version", read(os.path.join(SRC, "tools/VERSION")).strip())
+    p = set_key(p, "skeleton", "source", git_out(SRC, "remote", "get-url", "origin") or SRC)
     write("project.toml", p, new=False)
     write("workflow/.installed", "\n".join(sorted(set(created) | {"workflow/.installed"})) + "\n", new=False)
 

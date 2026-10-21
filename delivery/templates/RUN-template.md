@@ -7,7 +7,8 @@
   - Fill only when execution starts after human approval, immediately before the first code or test change.
 - Completed at (datetime):
   - Fill at `/close`, after the review.
-- Branch:            (created before the first change: `delivery/guide/git.md`)
+- Branch:            (created at `/brief`: `delivery/guide/git.md`)
+- Upstream:          only for a story with `repo = "<name>"` in stories.toml: the commit or tag in that repository
 - PR:                (`/persist`)
 
 ---
@@ -199,6 +200,14 @@ Summary:
 - Outcome: `ok-to-close` / `changes-requested`
 - Findings:
   - …
+
+---
+
+## Pending owner actions
+
+> Actions only a person can do that the story still waits for (a tag, a release, a setting, a sign-off), one per line.
+> `make next` lists the open ones of every RUN; a RUN cannot close with Goal achieved `Yes` while one is open.
+- [ ] <action> — owner: <name> — since: <YYYY-MM-DD>
 
 ---
 
