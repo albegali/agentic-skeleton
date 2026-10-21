@@ -19,6 +19,7 @@ design = ""                  # existing design or prototype: /mockup maps it ins
 [git]
 # Delivery git rules: delivery/guide/git.md
 merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
+max_branch_age_days = 3      # trunk-based development: a branch with commits older than this, not in main, is reported as stale
 trailers = "none"            # attribution in agent commits and PR bodies: none (no co-author / "generated with" lines) | agent (an `Agent: <tool>/<model>` trailer, no co-author) | tool (the tool's default)
 
 [gates]

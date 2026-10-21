@@ -39,7 +39,7 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 - End every step with the next command (written `/name`; in Codex the same skill is `$name`) and each pending human gate as `file → field → value` plus its `make approve …` command: the human never has to ask what comes next or how to approve.
 - Templates in `inception/templates/`, `analysis/templates/`, `delivery/templates/` are authoritative: use them as they are.
 - No secrets or personal data in logs, artifacts or prompts.
-- Git: `delivery/guide/git.md` (single source). In short: one branch and one PR per story; `/persist` pushes and waits for CI, `/close` merges **only that story's PR** after the review; other branches are reported, never merged or deleted.
+- Git: `delivery/guide/git.md` (single source). In short: **trunk-based development** — `main` is the only long-lived branch, no `release/*`/`develop`/integration branches (a release is a tag); one short-lived branch and one PR per story; `/persist` pushes and waits for CI, `/close` merges **only that story's PR** after the review; other branches are reported, never merged or deleted.
 
 ## 4. Language
 

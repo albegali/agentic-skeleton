@@ -350,6 +350,7 @@ def run(args: list[str], as_json: bool) -> None:
             rec["claimable"] = claimable(wf.sprints(), me)
     rec["phase"] = phase
     rec["weekly_due"] = weekly_due()
+    rec["stale_branches"] = wf.stale_branches()
     rec["pending"] = [{"id": os.path.basename(p)[4:].split(".")[0], "action": a} for p in wf.matches("delivery/30-runs/RUN-*.md")
                       for a in wf.pending_actions(wf.read(p))]
     info = step_info(rec["step"])
@@ -404,6 +405,10 @@ def run(args: list[str], as_json: bool) -> None:
         print("\nPending owner actions (RUN `## Pending owner actions`):")
         for x in rec["pending"]:
             print(f"  {x['id']}: {x['action']}")
+    if stale := wf.stale_branches():
+        print("\nStale branches (trunk-based development: merge within days, or split / drop):")
+        for b in stale:
+            print(f"  {b['branch']}: {b['commits']} commit(s) not in main, {b['days']} days old")
     if rec["weekly_due"]:
         print("\n(reminder) The weekly journal is older than 7 days: /weekly")
 

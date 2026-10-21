@@ -3,6 +3,11 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.17.0
+- Trunk-based development (mandatory, `delivery/guide/git.md`): `main` is the only long-lived branch, a release is a tag; short-lived story branches updated from `origin/main` before `/persist` and `/close`.
+- `gate_guard.py` blocks creating `release/*`, `develop`, `staging`, `integration` branches; `make next` and `make check` report branches with commits older than `[git] max_branch_age_days` (default 3) not in `main`.
+- **Upgrade**: `make sync-skeleton` adds `max_branch_age_days` to `project.toml [git]`; delete any long-lived branch your project still has.
+
 ## 1.16.0
 - Upgrade path: `make sync-skeleton` (3-way merge per file, nothing written on conflict, migrations, new settings added); `project.toml [skeleton] version/source`; this changelog.
 - Cross-repo stories: `repo = "<name>"` on a story, RUN References `Upstream:`; pending owner actions in RUN `## Pending owner actions`, shown by `make next`.

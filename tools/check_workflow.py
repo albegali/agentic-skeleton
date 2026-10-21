@@ -413,6 +413,12 @@ def check_claims() -> None:
             W.append(f"{who} has {len(ids)} open stories claimed ({', '.join(ids)}): one at a time per person")
 
 
+def check_trunk() -> None:
+    """Trunk-based development (delivery/guide/git.md): no long-lived branch."""
+    for b in wf.stale_branches():
+        W.append(f"branch {b['branch']}: {b['commits']} commit(s) not in main for {b['days']} days: finish it, split the story or drop it (trunk-based development)")
+
+
 def check_spec_index() -> None:
     import gen_backlog
     if wf.matches("delivery/20-specs/SPEC-*.md") and (not wf.exists(gen_backlog.SPEC_INDEX) or wf.read(gen_backlog.SPEC_INDEX) != gen_backlog.spec_index()):
@@ -501,7 +507,7 @@ def main() -> None:
 
     fr, nfr, prio = check_inception()
     tag("inception", 0, 0)
-    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index), ("backlog", check_claims)]
+    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index), ("backlog", check_claims), ("backlog", check_trunk)]
     steps += [("chain", check_revisions), ("chain", check_approval_order)] if "--git" in sys.argv else []
     for area, fn in steps + [("adapters", check_adapters)]:
         ne, nw = len(E), len(W)
