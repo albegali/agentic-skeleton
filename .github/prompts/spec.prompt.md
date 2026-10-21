@@ -7,6 +7,7 @@ model: "Claude Sonnet 5.5"
 Arguments (<ID> <requested changes>): ${input:args}
 
 Developer mode. Arguments: the arguments above. Update only `delivery/20-specs/SPEC-<ID>-*.md` as requested, following `delivery/templates/SPEC-template.md`.
+The requests are the arguments plus the human's open requests in Spec §10 Notes / Clarifications: apply them all and mark each handled request in §10 (`→ done <date>`, or `→ not applied: <reason>`).
 Do not touch the Brief, except for an Addendum (Brief §8) if the intent changes.
 If the RUN strategy is already approved (RUN §2) and the RUN is not Closed/Cancelled: set the Spec to `Draft`, add a RUN §6 `Deviation #n` (what changed in the Spec, plan impact, `Scope impact: Requires approval`) and set the RUN to `Blocked`. The human sets the Spec back to `Ready`, then runs `/run <ID> approve-deviation <n>`.
 Chat: 3 lines with what changed and, if the RUN was blocked, the two pending gates.

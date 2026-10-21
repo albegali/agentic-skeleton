@@ -20,7 +20,7 @@ artifact_type: refined
 us_id: STORY_<ID>
 title: <Short title>
 roadmap_phase: <R1 | R2 | … | unknown>
-status: draft | refined | approved
+status: draft | refined | approved   # agent: draft → refined (outcome ready*); owner only: approved (optional)
 source_files:
   - analysis/10-stories/STORY_<ID>_<short_title>.md
   - analysis/20-analysis/ANALYSIS_<ID>_<short_title>.md

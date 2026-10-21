@@ -19,6 +19,7 @@ design = ""                  # existing design or prototype: /mockup maps it ins
 [git]
 # Delivery git rules: delivery/guide/git.md
 merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
+trailers = "none"            # attribution lines agents add to commits and PR bodies: none (no co-author / "generated with" lines) | tool (the tool's default)
 
 [portal]
 # Agentic portal, started by `make portal` (tools/portal.py). Uncomment to pin a release:
