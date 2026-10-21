@@ -30,11 +30,14 @@ def stack() -> dict:
         return tomllib.load(f).get("stack", {})
 
 
+LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # the app runs here: never ask a system proxy (macOS)
+
+
 def wait_for(url: str, proc: subprocess.Popen, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and proc.poll() is None:
         try:
-            urllib.request.urlopen(url, timeout=2).close()
+            LOCAL.open(url, timeout=2).close()
             return True
         except urllib.error.HTTPError:
             return True  # it answers, even if not 2xx

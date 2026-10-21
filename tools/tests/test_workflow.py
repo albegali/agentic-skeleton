@@ -106,8 +106,9 @@ class Repo:
             p = set_key(p, section, key, value)
         self.write("project.toml", p)
 
-    def run(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8")
+    def run(self, *args: str, ok: bool = True, timeout: float | None = None) -> subprocess.CompletedProcess:
+        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                           timeout=timeout)
         if ok and r.returncode != 0:
             raise AssertionError(f"{args} failed:\n{r.stdout}\n{r.stderr}")
         return r
@@ -549,7 +550,7 @@ class LaunchTest(unittest.TestCase):
                      f"h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler).handle_request()\n")
         self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" serve_once.py')
         self.r.toml_set("project.toml", "stack", "url", f"http://127.0.0.1:{port}/")
-        out = self.r.run("tools/launch.py", "--timeout", "20")
+        out = self.r.run("tools/launch.py", "--timeout", "20", timeout=60)  # the app never answering must fail, not hang
         self.assertIn(f"http://127.0.0.1:{port}/", out.stdout)
 
     def test_returns_the_app_exit_code(self):
