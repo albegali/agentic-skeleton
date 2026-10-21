@@ -1097,6 +1097,29 @@ class GateTest(unittest.TestCase):
     def git(self, *a: str) -> str:
         return subprocess.run(["git", *a], cwd=self.r.dir, capture_output=True, text=True, check=True).stdout
 
+    def test_guard_allows_forced_delete_only_of_a_branch_already_in_main(self):
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Pat Owner")
+        self.git("config", "user.email", "pat@example.org")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("switch", "-qc", "dm0101-done")
+        self.r.write("done.txt", "x\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "work")
+        self.git("switch", "-qc", "dm0102-open", "main")
+        self.r.write("open.txt", "y\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "other work")
+        self.git("switch", "-q", "main")
+        self.git("merge", "--squash", "dm0101-done")
+        self.git("commit", "-qm", "squash")
+        run = lambda c: self.guard("Bash", {"command": c}).returncode
+        self.assertEqual(run("git branch -D dm0101-done"), 0)
+        self.assertEqual(run("git branch -D dm0102-open"), 2)
+        self.assertEqual(run("git branch -D main"), 2)
+        self.assertEqual(run("git branch -D dm0101-done dm0102-open"), 2)
+
     def test_stale_branches_are_reported_by_check_and_next(self):
         r = self.r
         self.git("init", "-q", "-b", "main")
