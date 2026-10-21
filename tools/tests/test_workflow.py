@@ -107,8 +107,12 @@ class Repo:
         self.write("project.toml", p)
 
     def run(self, *args: str, ok: bool = True, timeout: float | None = None) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8",
-                           timeout=timeout)
+        try:
+            r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                               timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            out = [x.decode("utf-8", "replace") if isinstance(x, bytes) else x or "" for x in (e.stdout, e.stderr)]
+            raise AssertionError(f"{args} timed out after {timeout}s:\n{out[0]}\n{out[1]}") from None
         if ok and r.returncode != 0:
             raise AssertionError(f"{args} failed:\n{r.stdout}\n{r.stderr}")
         return r
@@ -547,7 +551,8 @@ class LaunchTest(unittest.TestCase):
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         self.r.write("serve_once.py", "import http.server as h, sys\n"
-                     f"h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler).handle_request()\n")
+                     f"s = h.HTTPServer(('127.0.0.1', {port}), h.SimpleHTTPRequestHandler)\n"
+                     "print('app listening', flush=True)\ns.handle_request()\nprint('app served one request', flush=True)\n")
         self.r.toml_set("project.toml", "stack", "run", f'"{sys.executable}" serve_once.py')
         self.r.toml_set("project.toml", "stack", "url", f"http://127.0.0.1:{port}/")
         out = self.r.run("tools/launch.py", "--timeout", "20", timeout=60)  # the app never answering must fail, not hang
