@@ -140,8 +140,9 @@ def refined_not_ready(text: str) -> bool:
 
 
 def deps_done(i: str) -> bool:
+    """Every dependency is closed; an unknown dependency is never done (make check reports it)."""
     st = wf.stories()
-    return all(stage(d)[0] == "done" for d in st[i].get("deps", []) if d in st)
+    return all(d in st and stage(d)[0] == "done" for d in st[i].get("deps", []))
 
 
 def recommend(plan: list[dict]) -> dict:

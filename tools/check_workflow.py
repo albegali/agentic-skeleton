@@ -2,16 +2,23 @@
 """Deterministic consistency check of the workflow (review mode helper). Exit 1 on errors.
 
 Inception: unique FR/NFR IDs; ADR numbering; mockup map cites existing FRs.
-Backlog:   story IDs match project.toml prefix; epics exist; deps exist and are acyclic; FR/NFR links exist; Must FRs covered.
-Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution; Persisted before Closed.
+Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist; deps exist and are acyclic; FR/NFR links exist;
+           Must FRs covered. PLAN.md ↔ backlog: unknown IDs/epics, unplanned or twice-planned stories, a dependency planned
+           after its dependant, sprint capacity (frontmatter `capacity:`), Must stories planned after their release target,
+           sprints past their end date with open stories.
+Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution;
+           Persistence (§7) before Closed; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template
+           placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
            (same exit code: a workflow with errors is still a successful check, reported in data).
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -77,6 +84,10 @@ def check_backlog(fr: set[str], nfr: set[str], prio: dict[str, str]) -> None:
     st = b.get("story", [])
     if not st:
         return
+    schema = wf.backlog_errors()
+    if schema:  # the other checks (and tools) assume a valid schema
+        E.extend(schema)
+        return
     rx = re.compile(rf"^{wf.id_rx()}$")
     epics = {e["id"] for e in b.get("epic", [])}
     ids = [s["id"] for s in st]
@@ -127,6 +138,95 @@ def check_backlog(fr: set[str], nfr: set[str], prio: dict[str, str]) -> None:
         W.append(f"Must requirement {x} not covered by any story")
 
 
+def check_plan() -> None:
+    """PLAN.md sprints and releases against backlog/stories.toml (reported under the backlog area)."""
+    if not wf.exists("PLAN.md") or wf.backlog_errors():
+        return
+    import next_step  # lazy: next_step imports wf
+    st = wf.stories()
+    epics = {e.get("id") for e in wf.backlog().get("epic", [])}
+    text = wf.read("PLAN.md")
+    rows = wf.sprints()
+    where: dict[str, list[str]] = {}
+    for sp in rows:
+        for i in sp["ids"]:
+            where.setdefault(i, []).append(sp["sprint"])
+    for line in text.splitlines():
+        if re.match(r"^\|\s*S\d+", line):
+            for ep in re.findall(r"EP-\d{2}", line.split("|")[4] if line.count("|") > 4 else ""):
+                if ep not in epics:
+                    E.append(f"PLAN.md: unknown epic {ep}")
+    for i, sps in where.items():
+        if i not in st:
+            E.append(f"PLAN.md: unknown story {i} ({sps[0]})")
+        elif len(sps) > 1:
+            W.append(f"PLAN.md: {i} planned in more than one sprint ({', '.join(sps)})")
+    if rows:
+        unplanned = [i for i in st if i not in where]
+        if unplanned:
+            W.append(f"PLAN.md: stories in no sprint: {', '.join(unplanned)}")
+    order = {sp["sprint"]: n for n, sp in enumerate(rows)}
+    for i, sps in where.items():
+        for d in st.get(i, {}).get("deps", []):
+            if d in where and order[where[d][0]] > order[sps[0]]:
+                W.append(f"PLAN.md: {i} ({sps[0]}) depends on {d}, planned later ({where[d][0]})")
+    fm = wf.front(text, "capacity")
+    cap = int(fm) if fm and fm.isdigit() else None
+    points = dict(wf.POINTS)
+    for k, v in re.findall(r"\b(XS|S|M|L|XL)\s*=\s*(\d+)", wf.front(text, "points") or ""):
+        points[k] = int(v)
+    if cap:
+        for sp in rows:
+            used = sum(points.get(st[i].get("size", ""), 0) for i in sp["ids"] if i in st)
+            if used > cap:
+                W.append(f"PLAN.md: {sp['sprint']} has {used} points, capacity {cap}")
+    ends = wf.sprint_ends()
+    targets = {r["id"]: wf.plan_date(r["target"], 0) for r in wf.releases()}
+    for i, sps in where.items():
+        s = st.get(i, {})
+        end, target = ends.get(sps[0]), targets.get(s.get("release", ""))
+        if s.get("priority") == "Must" and end and target and end > target:
+            W.append(f"PLAN.md: Must story {i} planned in {sps[0]} (ends {end}), after {s['release']} target {target}")
+    today = dt.date.today()
+    for sp in rows:
+        end = ends.get(sp["sprint"])
+        if end and end < today:
+            late = [i for i in sp["ids"] if i in st and next_step.stage(i)[0] != "done"]
+            if late:
+                W.append(f"PLAN.md: {sp['sprint']} ended {end} with open stories {', '.join(late)}: update the plan")
+
+
+UNCHECKED = re.compile(r"^\s*-\s*\[ \]\s*(.*)$", re.M)
+
+
+def unchecked(text: str, heading_rx: str) -> list[str]:
+    """Unticked boxes of a section, except those marked deferred / n/a (a decision, not a forgotten box)."""
+    sec = wf.heading_section(text, heading_rx) or ""
+    return [m.strip() for m in UNCHECKED.findall(sec) if not re.search(r"\b(deferred|n/a|not applicable)\b", m, re.I)]
+
+
+PLACEHOLDER = re.compile(r"^\s*(?:-\s*)?(?:…|\.\.\.)\s*$|^\s*-\s*Step \d+:\s*…\s*$|(?:^|[\s(])<[A-Z][^<>\n]{0,60}>|\bYYYY-MM-DD\b")
+
+
+def placeholders(text: str) -> list[int]:
+    """Line numbers still holding template placeholders (`…` items, `<Title>`, `YYYY-MM-DD`), code excluded."""
+    out, fence = [], None
+    for n, line in enumerate(text.splitlines(), 1):
+        if f := wf.FENCE.match(line):
+            fence = None if fence == f.group(1) else fence or f.group(1)
+            continue
+        if not fence and PLACEHOLDER.search(re.sub(r"`[^`]*`", "", line)):
+            out.append(n)
+    return out
+
+
+def check_placeholders(label: str, text: str) -> None:
+    lines = placeholders(text)
+    if lines:
+        W.append(f"{label}: {len(lines)} template placeholder(s) left (line {', '.join(map(str, lines[:5]))}"
+                 + (", …" if len(lines) > 5 else "") + ")")
+
+
 def check_chain() -> None:
     idrx = rf"{wf.id_rx()}"
     for kind, pat, rx in [
@@ -144,7 +244,10 @@ def check_chain() -> None:
         for p in wf.matches(pat):
             bad_status(wf.rel(p), kind, wf.front(wf.read(p), "status"))
     for p in wf.matches("delivery/10-briefs/BRIEF-*.md"):
-        bad_status(wf.rel(p), "brief", wf.md_status(wf.read(p)))
+        t = wf.read(p)
+        bad_status(wf.rel(p), "brief", wf.md_status(t))
+        if wf.status("brief", wf.md_status(t)):
+            check_placeholders(wf.rel(p), t)
     for p in wf.matches("analysis/30-refined/REFINED_*.md"):
         i = os.path.basename(p).split("_")[1]
         if not wf.matches(f"analysis/20-analysis/ANALYSIS_{i}_*.md"):
@@ -161,6 +264,12 @@ def check_chain() -> None:
             E.append(f"SPEC-{i}: BRIEF-{i} missing")
         if s in ("In Progress", "Done") and not wf.matches(f"delivery/30-runs/RUN-{i}*.md"):
             E.append(f"SPEC-{i} {s} without RUN")
+        if s == "Done":
+            for sec, rx in (("acceptance criteria", r"^#\s+4\."), ("quality gates", r"^#\s+7\.")):
+                if left := unchecked(t, rx):
+                    E.append(f"SPEC-{i} Done with unchecked {sec}: {'; '.join(left)}")
+        if s and s != "Draft":
+            check_placeholders(f"SPEC-{i}", t)
     for p in wf.matches("delivery/30-runs/RUN-*.md"):
         t = wf.read(p)
         m = re.match(rf"RUN-({idrx})", os.path.basename(p))
@@ -176,8 +285,43 @@ def check_chain() -> None:
             E.append(f"RUN-{i}: Execution Strategy missing")
         if s and s != "Draft" and not wf.run_approved(t):
             E.append(f"RUN-{i}: status {s} without recorded approval (§2)")
-        if s == "Closed" and not re.search(r"# 7\. Persistence.*?- \[x\]", t, re.S):
+        if s == "Closed" and not re.search(r"^\s*-\s*\[[xX]\]", wf.heading_section(t, r"^#\s+7\.") or "", re.M):
             E.append(f"RUN-{i}: Closed without Persistence")
+        if s == "Closed" and (left := unchecked(t, r"^#\s+8\.")):
+            E.append(f"RUN-{i}: Closed with unchecked quality gates: {'; '.join(left)}")
+        if s and s != "Draft":
+            check_placeholders(f"RUN-{i}", t)
+
+
+CLOSED = (("delivery/10-briefs/BRIEF-*.md", "brief", "Closed"), ("delivery/20-specs/SPEC-*.md", "spec", "Done"),
+          ("delivery/30-runs/RUN-*.md", "run", "Closed"))
+
+
+def git(*args: str) -> str | None:
+    r = subprocess.run(["git", *args], cwd=wf.ROOT, capture_output=True, text=True, encoding="utf-8")
+    return r.stdout if r.returncode == 0 else None
+
+
+def revisions(text: str) -> int:
+    return len(re.findall(r"^\s*-\s+\S", wf.heading_section(text, r"^#+\s+Revisions\b") or "", re.M))
+
+
+def check_revisions() -> None:
+    """--git: an artifact changed after the commit that closed it must add a line under a `Revisions` heading."""
+    if git("rev-parse", "--is-inside-work-tree") is None:
+        W.append("--git: not a git repository, revision check skipped")
+        return
+    for pat, kind, final in CLOSED:
+        for p in wf.matches(pat):
+            r = wf.rel(p)
+            closed_at = None
+            for c in (git("log", "--format=%H", "--reverse", "--", r) or "").split():
+                old = git("show", f"{c}:{r}")
+                if old is not None and wf.status(kind, wf.md_status(old)) == final:
+                    closed_at = (c, old)
+                    break
+            if closed_at and wf.read(p) != closed_at[1] and revisions(wf.read(p)) <= revisions(closed_at[1]):
+                W.append(f"{r}: changed after closure ({closed_at[0][:7]}) without a new line under `## Revisions`")
 
 
 def check_adapters() -> None:
@@ -194,11 +338,13 @@ def main() -> None:
 
     fr, nfr, prio = check_inception()
     tag("inception", 0, 0)
-    for area, fn in (("backlog", lambda: check_backlog(fr, nfr, prio)), ("chain", check_chain), ("adapters", check_adapters)):
+    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain)]
+    steps += [("chain", check_revisions)] if "--git" in sys.argv else []
+    for area, fn in steps + [("adapters", check_adapters)]:
         ne, nw = len(E), len(W)
         fn()
         tag(area, ne, nw)
-    counts = {"FR": len(fr), "NFR": len(nfr), "ADR": len(wf.matches("reference/architecture/ADR-*.md")), "stories": len(wf.stories()),
+    counts = {"FR": len(fr), "NFR": len(nfr), "ADR": len(wf.matches("reference/architecture/ADR-*.md")), "stories": len(wf.backlog().get("story", [])),
               "Analysis": len(wf.matches("analysis/20-analysis/ANALYSIS_*.md")), "Refined Story": len(wf.matches("analysis/30-refined/REFINED_*.md")),
               "Brief": len(wf.matches("delivery/10-briefs/BRIEF-*.md")), "Spec": len(wf.matches("delivery/20-specs/SPEC-*.md")),
               "RUN": len(wf.matches("delivery/30-runs/RUN-*.md"))}

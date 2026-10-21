@@ -2,6 +2,9 @@
 artifact_type: plan
 status: draft            # draft | approved
 owner: <product owner>
+start: YYYY-MM-DD        # first day of S1: sprint dates DD/MM take their year from it
+capacity:                # story points per sprint, checked by make check (empty = not checked)
+points: S=1 M=2 L=3 XL=5 # points per story size
 last_updated: YYYY-MM-DD
 ---
 
