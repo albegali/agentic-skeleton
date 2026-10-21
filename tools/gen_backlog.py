@@ -9,6 +9,7 @@ Options:
   --deps   print only the compact dependency list (used by the plan step), write nothing
   --csv    also write reference/backlog/tracker-import.csv (generic import for an external tracker)
   --json   print the contract envelope `backlog`: epics and stories (TOML fields + paths of their artifacts), write nothing
+  --spec-index  write only delivery/20-specs/README.md (used by the upgrade)
 """
 from __future__ import annotations
 
@@ -87,6 +88,11 @@ def spec_index() -> str:
 
 
 def main() -> None:
+    if "--spec-index" in sys.argv:  # only the Spec index (used by the upgrade, which never touches Story files)
+        if wf.matches("delivery/20-specs/SPEC-*.md") and (not wf.exists(SPEC_INDEX) or wf.read(SPEC_INDEX) != spec_index()):
+            wf.write(SPEC_INDEX, spec_index())
+            print(f"regenerated {SPEC_INDEX}")
+        return
     if "--json" in sys.argv:
         try:
             b = wf.backlog()

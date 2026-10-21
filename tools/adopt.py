@@ -4,7 +4,7 @@
   python3 tools/adopt.py ../my-app [--name "My App"] [--prefix MA] [--language en] [--owner "Jane Doe"]
                                    [--tools claude-code,codex,copilot,cursor] [--dry-run] [--allow-dirty]
   make adopt TARGET=../my-app ARGS="--prefix MA"
-  python3 tools/adopt.py ../my-app --upgrade [--dry-run]   # a project already on the workflow: upgrade (tools/upgrade.py)
+  python3 tools/adopt.py ../my-app --upgrade [--dry-run] [--keep PATH] [--take PATH]   # a project already on the workflow: upgrade (tools/upgrade.py)
 
 Deterministic, no LLM. It never overwrites a file of the target:
   - workflow files (tools, steps, templates, guides, project.toml, models.toml) are copied only where absent; an
@@ -42,6 +42,9 @@ INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/work
            "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json",
            "tools/CHANGELOG.md", "tools/migrations/*.py"]
 NOT_INSTALLED = {"tools/adopt.py", "tools/upgrade.py"}  # the installer and the upgrader stay in the skeleton
+# upgraded where the project has them (a project created from the template), never added (an adopted repository)
+# (adopt.py / upgrade.py too: a template clone carries them, and its tool tests exercise them)
+UPGRADE_IF_PRESENT = ["tools/tests/*.py", ".github/workflows/workflow-check.yml", "tools/adopt.py", "tools/upgrade.py"]
 OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep|tasks\.json)$")  # on conflict: keep the target's file, skip ours
 MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json", ".codex/config.toml"}  # .codex/config.toml: kept as is
 DROP_TARGETS = {"adopt", "test-tools"}  # the tools tests copy the whole repository: not for an application repo
@@ -54,13 +57,13 @@ def seg_match(p: str, pat: str) -> bool:
     return len(a) == len(b) and all(fnmatch.fnmatch(x, y) for x, y in zip(a, b))
 
 
-def skeleton_files() -> list[str]:
+def skeleton_files(patterns: list[str] = INSTALL, skip: set[str] = NOT_INSTALLED) -> list[str]:
     try:
         files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=SRC, capture_output=True, text=True, check=True).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError):
         files = [os.path.relpath(os.path.join(d, n), SRC).replace(os.sep, "/") for d, _, ns in os.walk(SRC) for n in ns
                  if f"{os.sep}.git{os.sep}" not in d + os.sep]  # not a git checkout: same `/` paths as git ls-files
-    return sorted(f for f in files if f not in NOT_INSTALLED and any(seg_match(f, p) for p in INSTALL))
+    return sorted(f for f in files if f not in skip and any(seg_match(f, p) for p in patterns))
 
 
 def read(p: str) -> str:
@@ -150,6 +153,10 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     ap.add_argument("--allow-dirty", action="store_true", help="run even with uncommitted changes in the target")
     ap.add_argument("--upgrade", action="store_true", help="the target already uses the workflow: upgrade it to this skeleton")
+    ap.add_argument("--keep", action="append", default=[], metavar="PATH",
+                    help="upgrade: a conflict resolved by hand, the project's file is the resolution (repeatable)")
+    ap.add_argument("--take", action="append", default=[], metavar="PATH",
+                    help="upgrade: a conflict resolved by taking the skeleton's file, local changes dropped (repeatable)")
     a = ap.parse_args()
 
     dst = os.path.abspath(a.target)
@@ -165,7 +172,11 @@ def main() -> None:
         if os.path.isdir(os.path.join(dst, ".git")) and git_out(dst, "status", "--porcelain") and not a.allow_dirty:
             sys.exit("the target has uncommitted changes: commit or stash them first, so the upgrade is one reviewable diff")
         import upgrade
-        upgrade.upgrade(SRC, dst, skeleton_files(), read, lambda f: f not in NOT_INSTALLED and any(seg_match(f, p) for p in INSTALL), a.dry_run)
+        extra = skeleton_files(UPGRADE_IF_PRESENT, set())
+        has = {p for p in UPGRADE_IF_PRESENT if any(seg_match(f, p) and os.path.exists(os.path.join(dst, f)) for f in extra)}
+        upgrade.upgrade(SRC, dst, skeleton_files() + [f for f in extra if any(seg_match(f, p) for p in has)], read,
+                        lambda f: f not in NOT_INSTALLED and any(seg_match(f, p) for p in [*INSTALL, *has]), a.dry_run,
+                        keep=set(a.keep), take=set(a.take))
         if not a.dry_run and os.path.exists(os.path.join(dst, "workflow.mk")):  # adopted with an own Makefile: regenerate its targets
             mk = os.path.join(dst, "Makefile")
             with open(os.path.join(dst, "workflow.mk"), "w", encoding="utf-8") as f:
