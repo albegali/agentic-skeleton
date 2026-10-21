@@ -3,6 +3,9 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.17.2
+- `check_workflow.py --git` (#37): a RUN already approved in the base branch is not checked against the current branch's commits, so a later branch (e.g. a skeleton upgrade) no longer fails with "code committed with the strategy approval" for every closed RUN.
+
 ## 1.17.1
 - `make sync-skeleton` fixes (#35): the example templates are compared and written with the project's ID prefix; the Spec index is regenerated, never merged (`gen_backlog.py --spec-index`); a conflict is resolved with `ARGS="--keep <file>"` (your hand merge) or `--take <file>` (the skeleton's file); tool tests and `workflow-check.yml` are upgraded where the project has them, never added; new settings of a tool already in `models.toml [tools.<name>]` are added.
 - `make check`: a Closed RUN whose §11 is the old `Addendum` (skeleton before 1.7.0) gets the "no §11 Review" warning, not a review-record error.

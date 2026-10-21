@@ -476,6 +476,8 @@ def check_approval_order() -> None:
         r = wf.rel(p)
         if not wf.run_approved(wf.read(p)):
             continue
+        if (was := git("show", f"{base}:{r}")) is not None and wf.run_approved(was):
+            continue  # approved before this branch (already in the base): not this branch's gate
         approved_at = next((c for c in commits if (old := git("show", f"{c}:{r}")) is not None and wf.run_approved(old)), None)
         if approved_at is None:
             continue  # approved before this branch
