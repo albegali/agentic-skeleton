@@ -71,7 +71,8 @@ def write(i: str, results: list[dict]) -> str:
         t = t.rstrip("\n") + "\n\n# 8. Quality Gates Check\n\n" + new
     tests = next((r for r in results if r["gate"] == "test"), None)
     if tests:  # keep the §8 `Tests:` fact in step with the gate
-        t = re.sub(r"^(\s*-\s*Tests:)[^\n]*$", rf"\g<1> {tests['cmd']} → {'pass' if tests['ok'] else 'fail'}", t, count=1, flags=re.M)
+        fact = f" {tests['cmd']} → {'pass' if tests['ok'] else 'fail'}"  # a function replacement: Windows paths hold backslashes
+        t = re.sub(r"^(\s*-\s*Tests:)[^\n]*$", lambda m: m.group(1) + fact, t, count=1, flags=re.M)
     wf.write(run_file, t)
     return wf.rel(run_file)
 
