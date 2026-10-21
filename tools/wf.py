@@ -168,6 +168,46 @@ SECURITY_RX = re.compile(r"\b(auth\w*|login|password\w*|passwd|credential\w*|sec
 SECURITY_SECTIONS = ("security", "privacy")
 
 
+BRANCH_ID = re.compile(r"(?:^|/)([A-Za-z]+\d{4})-[\w.-]+$")
+
+
+def story_branches() -> dict[str, list[dict]]:
+    """Story branches, local and remote (`<id-lowercase>-<slug>`): {ID: [{"ref", "author"}]}. A pushed story branch is
+    a claim the whole team sees, without writing to main."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "for-each-ref", "--format=%(refname:short)\t%(authorname)\t%(authoremail)", "refs/heads", "refs/remotes"],
+                           cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    out: dict[str, list[dict]] = {}
+    ids = set(stories())
+    for line in r.stdout.splitlines() if r.returncode == 0 else []:
+        ref, name, email = (line.split("\t") + ["", ""])[:3]
+        if (m := BRANCH_ID.search(ref)) and (i := norm_id(m.group(1))) in ids and not ref.endswith("/HEAD"):
+            short = ref.split("/", 1)[1] if ref.startswith(("origin/", "upstream/")) else ref
+            if not any(b["branch"] == short for b in out.get(i, [])):
+                out.setdefault(i, []).append({"ref": ref, "branch": short, "author": name, "email": email.strip("<>")})
+    return out
+
+
+def claims() -> dict[str, dict]:
+    """Who works on which story: `claimed_by` / `claimed_at` in stories.toml, else the author of its story branch."""
+    out = {}
+    branches = story_branches()
+    for i, s in stories().items():
+        if s.get("claimed_by"):
+            out[i] = {"by": s["claimed_by"], "at": s.get("claimed_at"), "source": "stories.toml", "branches": branches.get(i, [])}
+        elif branches.get(i):
+            b = branches[i][0]
+            out[i] = {"by": b["author"], "at": None, "source": f"branch {b['ref']}", "branches": branches[i]}
+    return out
+
+
+def same_person(a: str | None, b: str | None) -> bool:
+    return bool(a and b) and a.strip().lower() == b.strip().lower()
+
+
 def security_nfrs() -> set[str]:
     """NFR IDs filed under the Security or Privacy heading of the NFR file (FR-1 = FR-01 normalised to NFR-01)."""
     p = "reference/product/non-functional-requirements.md"
@@ -238,6 +278,9 @@ def backlog_errors() -> list[str]:
         for k in STORY_LINKS:
             if k in s and not (isinstance(s[k], str) and s[k]):
                 out.append(f"{who}: `{k}` must be a story ID")
+        for k in ("claimed_by", "claimed_at"):
+            if k in s and not (isinstance(s[k], str) and s[k].strip()):
+                out.append(f"{who}: `{k}` must be a non-empty string")
         for flag in ("skip_analysis", "security"):
             if flag in s and not isinstance(s[flag], bool):
                 out.append(f"{who}: `{flag}` must be true or false")

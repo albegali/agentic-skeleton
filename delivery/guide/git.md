@@ -3,9 +3,14 @@
 Every other file links here instead of restating the rule.
 
 ## Branch
-- One branch per story: `<id-lowercase>-<slug>` (e.g. `pr0101-login`), created from an up-to-date `main` before the first change of the RUN. Spikes use `spike/<id-lowercase>` and are never merged.
+- One branch per story: `<id-lowercase>-<slug>` (e.g. `pr0101-login`), created from an up-to-date `main` at `/brief` (or `/quick`), so the Brief, Spec and RUN live on it. In a team, `make claim ID=<ID> [WORKTREE=1]` creates it, records the claim and pushes it: a pushed story branch is a claim (`make next --me <name>` skips others' stories). Spikes use `spike/<id-lowercase>` and are never merged.
+- Parallel stories: one worktree per story (`make claim … WORKTREE=1` → `../<repo>-<id>`), one agent session per worktree.
+
+## Commit points
+- Inception and analysis steps commit their artifacts at the end of the step, on their own branch with a PR (`inception/<step>`, `analysis/<ids>`), or on `main` when it is not protected and you work alone. They never ride along in a story branch.
+- Brief and Spec: committed on the story branch at the end of `/brief` (or `/quick`).
 - Commit and push only at the end of `/persist` and `/close`, or when the user asks. One exception: the strategy approval is committed alone (RUN + Spec, `Approved-by`/`Approved-at` trailers) before any code — by `make approve` or by `/run <ID> approve`; CI (`check_workflow.py --git`) fails a branch whose code precedes it. The review's RUN §11 entry is committed by the next of the two.
-- Attribution: `project.toml` `[git] trailers`. `none` (default) → no `Co-Authored-By:` trailer and no "Generated with …" line in commit messages or PR bodies, even if the tool adds them by default; `tool` → keep the tool's default lines.
+- Attribution: `project.toml` `[git] trailers`. `none` (default) → no `Co-Authored-By:` trailer and no "Generated with …" line in commit messages or PR bodies, even if the tool adds them by default; `agent` → no co-author line, but an `Agent: <tool>/<model>` trailer, so agent and human commits can be told apart; `tool` → keep the tool's default lines.
 
 ## `/persist` — the story's PR, nothing merged
 1. Commit on the story branch and push it.

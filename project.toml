@@ -19,7 +19,7 @@ design = ""                  # existing design or prototype: /mockup maps it ins
 [git]
 # Delivery git rules: delivery/guide/git.md
 merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
-trailers = "none"            # attribution lines agents add to commits and PR bodies: none (no co-author / "generated with" lines) | tool (the tool's default)
+trailers = "none"            # attribution in agent commits and PR bodies: none (no co-author / "generated with" lines) | agent (an `Agent: <tool>/<model>` trailer, no co-author) | tool (the tool's default)
 
 [gates]
 # Quality gates run by `make gates ID=<ID>` at /persist; results go into RUN §8 `### Gates` and `make check` refuses to

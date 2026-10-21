@@ -418,7 +418,10 @@ Drop quick notes in `project-journal/notes/current-week.md` during the week: `/w
 - `AGENTS.md` is the only rule set. `CLAUDE.md`, `.github/copilot-instructions.md` and `.cursor/rules/workflow.mdc` just point to it.
 - Commit the generated adapters, so teammates get the commands without running anything.
 - Enable only the tools the team uses (`/kickoff`, or `enabled = false` in `models.toml` → `make agents`). Disabled tools' files are removed.
-- **One story, one owner, one RUN.** Avoid two agents on the same story at the same time. Different stories in parallel are fine if their dependencies are closed.
+- **One story, one owner, one RUN.** Claim a story before `/brief`: `make claim ID=CP0104` creates its branch, records `claimed_by` / `claimed_at` and pushes it, so the team sees the claim. `make next --me "<your git name>"` skips stories others claimed and lists the claimable ones (dependencies closed, plan order). `make check` warns about a story on two branches, a claim older than 14 days without a RUN, and more than one open story per person.
+- **Parallel stories**: `make claim ID=CP0105 WORKTREE=1` checks the branch out in `../<repo>-cp0105`; run one agent session per worktree.
+- **Commit points**: inception and analysis artifacts get their own branch and PR at the end of each step; Brief and Spec are committed on the story branch ([git rules](../delivery/guide/git.md#commit-points)).
+- **Telling agent commits apart**: `[git] trailers = "agent"` adds an `Agent: <tool>/<model>` trailer instead of a co-author line.
 - Human gates are people's decisions: agree on who approves what (usually the PO for inception and Spec, the tech lead for RUN strategies) and record it in `reference/documentation/stakeholders.md`.
 
 ---
