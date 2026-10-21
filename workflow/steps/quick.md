@@ -11,7 +11,7 @@ For stories with `type = "bug" | "hotfix" | "chore"` or `size = "XS"` (`delivery
 Developer mode, quick track for {ID}. Follow delivery/guide/quick.md within the printed budget.
 1. Brief in delivery/10-briefs/ (Type from the story; for bug/hotfix §3 Impact is required).
 2. Spec in delivery/20-specs/, short: bug/hotfix → root cause (or hypothesis) in §1, AC1 is a regression test that fails before the fix;
-   chore → the preset regression gates of the guide in §7. Status Draft. Add the row to delivery/20-specs/README.md.
+   chore → the preset regression gates of the guide in §7. Status Draft. `Requirements:` and AC `→ test:` as in the Spec template. `make backlog` (Spec index).
 3. RUN in delivery/30-runs/ with §1 Execution Strategy only. No code.
 Chat: root cause / change, AC count, plan in at most 6 lines; then stop: one approval covers Spec and strategy.
 ```

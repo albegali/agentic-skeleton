@@ -221,7 +221,7 @@ def unchecked(text: str, heading_rx: str) -> list[str]:
     return [m.strip() for m in UNCHECKED.findall(sec) if not re.search(r"\b(deferred|n/a|not applicable)\b", m, re.I)]
 
 
-PLACEHOLDER = re.compile(r"^\s*(?:-\s*)?(?:…|\.\.\.)\s*$|^\s*-\s*Step \d+:\s*…\s*$|(?:^|[\s(])<[A-Z][^<>\n]{0,60}>|\bYYYY-MM-DD\b")
+PLACEHOLDER = re.compile(r"^\s*(?:-\s*)?(?:…|\.\.\.)\s*$|^\s*-\s*Step \d+:\s*…\s*$|(?:^|[\s(])<[A-Z][^<>\n]{0,60}>|\bYYYY-MM-DD\b|\bN?FR-xx\b")
 
 
 def placeholders(text: str) -> list[int]:
@@ -241,6 +241,27 @@ def check_placeholders(label: str, text: str) -> None:
     if lines:
         W.append(f"{label}: {len(lines)} template placeholder(s) left (line {', '.join(map(str, lines[:5]))}"
                  + (", …" if len(lines) > 5 else "") + ")")
+
+
+AC_LINE = re.compile(r"^\s*-\s*\[[ xX]\]\s*AC\d+.*$", re.M)
+REQ_ID = re.compile(r"\b(N?FR)-0*(\d+)\b")
+
+
+def check_requirements(i: str, text: str, stories: dict) -> None:
+    """Spec `Requirements:` against the story's fr/nfr in backlog/stories.toml (FR-1 and FR-01 are the same)."""
+    m = re.search(r"^\s*-\s*Requirements:(.*)$", wf.heading_section(text, r"^##\s+References") or "", re.M)
+    story = stories.get(i)
+    if not m or story is None:
+        return
+    cited = {f"{k}-{int(n):02d}" for k, n in REQ_ID.findall(m.group(1))}
+    if not cited and re.search(r"\bN?FR-xx\b", m.group(1)):
+        return  # placeholder: reported by the placeholder check
+    planned = {f"{k}-{int(n):02d}" for x in story.get("fr", []) + story.get("nfr", []) for k, n in REQ_ID.findall(x)}
+    if cited != planned:
+        extra, miss = sorted(cited - planned), sorted(planned - cited)
+        W.append(f"SPEC-{i}: Requirements differ from backlog/stories.toml"
+                 + (f"; only in the Spec: {', '.join(extra)}" if extra else "") + (f"; only in the backlog: {', '.join(miss)}" if miss else "")
+                 + " (align one of them)")
 
 
 def check_chain() -> None:
@@ -271,6 +292,7 @@ def check_chain() -> None:
         i = os.path.basename(p).split("_")[1]
         if not wf.matches(f"analysis/20-analysis/ANALYSIS_{i}_*.md"):
             W.append(f"Refined Story {i} without Analysis")
+    stories = {} if wf.backlog_errors() else wf.stories()
     for p in wf.matches("delivery/20-specs/SPEC-*.md"):
         t = wf.read(p)
         i = os.path.basename(p).split("-")[1]
@@ -287,9 +309,14 @@ def check_chain() -> None:
             for sec, rx in (("acceptance criteria", r"^#\s+4\."), ("quality gates", r"^#\s+7\.")):
                 if left := unchecked(t, rx):
                     E.append(f"SPEC-{i} Done with unchecked {sec}: {'; '.join(left)}")
+            acs = AC_LINE.findall(wf.heading_section(t, r"^#\s+4\.") or "")
+            traced = "- Requirements:" in t or any("→ test:" in a for a in acs)  # Specs from 1.11 on; older ones are not flagged
+            if traced and (untested := [a for a in acs if "→ test:" not in a]):
+                W.append(f"SPEC-{i} Done with AC naming no test (`→ test: <path>::<name>` or `→ test: manual — <how>`): "
+                         + "; ".join(a.split(":")[0].strip("- []xX") for a in untested))
+        check_requirements(i, t, stories)
         if s and s != "Draft":
             check_placeholders(f"SPEC-{i}", t)
-    stories = {} if wf.backlog_errors() else wf.stories()
     for p in wf.matches("delivery/30-runs/RUN-*.md"):
         t = wf.read(p)
         m = re.match(rf"RUN-({idrx})", os.path.basename(p))
@@ -319,8 +346,25 @@ def check_chain() -> None:
             E.append(f"RUN-{i}: Closed without Persistence")
         if s == "Closed" and (left := unchecked(t, r"^#\s+8\.")):
             E.append(f"RUN-{i}: Closed with unchecked quality gates: {'; '.join(left)}")
+        gates = wf.heading_section(t, r"^#\s+8\.")
+        if s == "Closed" and gates is not None and not UNCHECKED.search(gates) and not re.search(r"^\s*-\s*\[[xX]\]", gates, re.M):  # facts, not ticks
+            for fact in ("Tests", "CI"):
+                v = re.search(rf"^\s*-?\s*{fact}:[ \t]*(.*)$", gates, re.M)
+                if not v or not v.group(1).strip() or re.search(r"pass / fail|green / red", v.group(1)):
+                    E.append(f"RUN-{i}: Closed without the `{fact}:` fact in §8")
+                elif re.search(r"→\s*fail\b", v.group(1), re.I):
+                    E.append(f"RUN-{i}: Closed with failing tests in §8: {v.group(1).strip()}")
+        acc = re.search(r"^Tuning accepted by:[ \t]*(.*)$", t, re.M)
+        if s in ("Persisted", "Reviewed", "Closed") and acc and not acc.group(1).strip():
+            W.append(f"RUN-{i}: {s} without `Tuning accepted by` (§5): record who accepted the result and when")
         if s and s != "Draft":
             check_placeholders(f"RUN-{i}", t)
+
+
+def check_spec_index() -> None:
+    import gen_backlog
+    if wf.matches("delivery/20-specs/SPEC-*.md") and (not wf.exists(gen_backlog.SPEC_INDEX) or wf.read(gen_backlog.SPEC_INDEX) != gen_backlog.spec_index()):
+        W.append(f"{gen_backlog.SPEC_INDEX} out of date: run `make backlog`")
 
 
 CLOSED = (("delivery/10-briefs/BRIEF-*.md", "brief", "Closed"), ("delivery/20-specs/SPEC-*.md", "spec", "Done"),
@@ -374,7 +418,7 @@ def main() -> None:
 
     fr, nfr, prio = check_inception()
     tag("inception", 0, 0)
-    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain)]
+    steps = [("backlog", lambda: check_backlog(fr, nfr, prio)), ("backlog", check_plan), ("chain", check_chain), ("chain", check_spec_index)]
     steps += [("chain", check_revisions)] if "--git" in sys.argv else []
     for area, fn in steps + [("adapters", check_adapters)]:
         ne, nw = len(E), len(W)
