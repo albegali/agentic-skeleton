@@ -61,7 +61,7 @@ backlog/stories.toml      backlog source of truth (created by /backlog)
 PLAN.md                   release plan (created by /release-plan)
 project-journal/          weekly / monthly memory of the project
 tools/                    next_step, context, check_workflow, gen_backlog, render_agents, init_project, rename_id, adopt, repo_map (+ tests)
-.claude/ .codex/ .github/prompts/ .cursor/   generated adapters — do not edit, run `make agents`
+.claude/ .codex/ .agents/ .github/ .cursor/   generated adapters — do not edit, run `make agents`
 ```
 
 ## Make targets
@@ -76,7 +76,6 @@ tools/                    next_step, context, check_workflow, gen_backlog, rende
 | `make test-tools` | tests of the workflow tools |
 | `make setup / test / lint` | stack commands from `project.toml [stack]` |
 | `make run` | start the app locally and open it in the browser (`[stack] run` / `url`) |
-| `make codex-prompts` | link the Codex prompts into `~/.codex/prompts` |
 | `make adopt TARGET=<repo>` | install the workflow into an existing repository (run from the skeleton; `ARGS="--dry-run"` first) |
 
 ## Tool notes
@@ -84,7 +83,7 @@ tools/                    next_step, context, check_workflow, gen_backlog, rende
 | Tool | Commands | Model per command | Rules file |
 |---|---|---|---|
 | Claude Code | `.claude/commands/` (`/next`, …), subagents in `.claude/agents/` | pinned (frontmatter `model`) | `CLAUDE.md` → `AGENTS.md` |
-| Codex CLI | `.codex/prompts/` → `make codex-prompts`, then `/prompts:next` | recommended at the top of the prompt (`codex -m <model>`) | `AGENTS.md` (native) |
+| Codex CLI | skills in `.agents/skills/` (`$next`, `$brief PR0101`); `.codex/prompts/` kept as fallback | profiles per tier in `.codex/config.toml` (`codex -p balanced`) | `AGENTS.md` (native) |
 | GitHub Copilot | `.github/prompts/*.prompt.md` (`/next` in chat) | pinned (frontmatter `model`; check the labels of your Copilot plan) | `.github/copilot-instructions.md` → `AGENTS.md` |
 | Cursor | `.cursor/commands/` (`/next`) | recommended at the top of the command | `.cursor/rules/workflow.mdc` → `AGENTS.md` |
 

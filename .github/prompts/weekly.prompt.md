@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Project journal — weekly summary (minimal cost)"
 model: "Claude Haiku 5.5"
 ---

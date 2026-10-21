@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — spike: time-boxed investigation, findings note and follow-up stories; no code merged"
 model: "Claude Sonnet 5.5"
 ---

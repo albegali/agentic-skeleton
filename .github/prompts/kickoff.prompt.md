@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — set up the project (name, ID prefix, language, tools) and write vision, summary, stakeholders, glossary"
 model: "Claude Sonnet 5.5"
 ---

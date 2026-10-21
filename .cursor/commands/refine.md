@@ -5,7 +5,7 @@ Analyst mode — Refined Story after the workshop (requires the minutes)
 
 Arguments: <ID…> <minutes file>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/refine.md` with arguments <the text typed after the command>: the IDs are {IDS}, the file path is {MINUTES}.
 If the minutes or the ID are missing, stop and ask.

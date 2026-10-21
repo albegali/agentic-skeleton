@@ -41,7 +41,7 @@ INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/work
            "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json"]
 NOT_INSTALLED = {"tools/adopt.py"}  # the installer stays in the skeleton
 OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep|tasks\.json)$")  # on conflict: keep the target's file, skip ours
-MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json"}
+MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json", ".codex/config.toml"}  # .codex/config.toml: kept as is
 DROP_TARGETS = {"adopt", "test-tools"}  # the tools tests copy the whole repository: not for an application repo
 STACK_TARGETS = {"help", "setup", "test", "lint", "run"}  # if the target defines them, its own version wins
 GITIGNORE = ["__pycache__/", "*.pyc", ".portal/"]  # .portal/: portal bundle cache and run state (make portal)

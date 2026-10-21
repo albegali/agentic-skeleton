@@ -277,6 +277,12 @@ def deep(step: str, ids: list[str]) -> bool:
     return bool(step_info(step).get("deep_command")) and any(st.get(i, {}).get("size") in DEEP_SIZES for i in ids)
 
 
+def commands_for(step: str, ids: list[str]) -> dict[str, str]:
+    """The command per enabled tool: Codex invokes the generated skills as `$name`, the others as `/name`."""
+    cmd = command_for(step, ids)
+    return {t: ("$" + cmd[1:] if t == "codex" and cmd.startswith("/") else cmd) for t in wf.enabled_tools()}
+
+
 def command_for(step: str, ids: list[str]) -> str:
     s = step_info(step)
     if step == "done":
@@ -325,6 +331,7 @@ def run(args: list[str], as_json: bool) -> None:
     rec["tier"] = "deep" if deep(rec["step"], rec["ids"]) else info.get("tier")
     rec["models"] = {k: wf.model_for(k, rec["tier"]) for k in wf.enabled_tools()} if rec["tier"] else {}
     rec["command"] = command_for(rec["step"], rec["ids"])
+    rec["commands"] = commands_for(rec["step"], rec["ids"])
 
     if as_json:
         out = {k: v for k, v in rec.items() if k not in ("states", "current", "next_sprint", "human_gates")}
@@ -352,7 +359,9 @@ def run(args: list[str], as_json: bool) -> None:
             for i, s in rec["human_gates"]:
                 print(f"  {i}: {s[1]}")
     print(f"\n→ Recommended step: {rec['step']} {' '.join(rec['ids'])}\n  {rec['why']}")
-    print(f"  Run: {rec['command']}" + (" (fresh session)" if info.get("owner") == "agent" else ""))
+    codex = rec["commands"].get("codex")
+    print(f"  Run: {rec['command']}" + (" (fresh session)" if info.get("owner") == "agent" else "")
+          + (f" · Codex: {codex}" if codex and codex != rec["command"] else ""))
     if rec.get("tier"):
         print(f"  Tier: {rec['tier']} → {wf.tier_line(rec['tier'])}")
         if info.get("deep_when") and rec["tier"] != "deep":

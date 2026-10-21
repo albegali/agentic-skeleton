@@ -5,6 +5,6 @@ Developer mode — quick track (bug, hotfix, chore, XS): Brief + Spec + RUN stra
 
 Arguments: <ID>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/quick.md` with {ID} = <the text typed after the command>. One story per session.

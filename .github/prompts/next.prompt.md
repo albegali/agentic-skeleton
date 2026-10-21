@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Compute the next workflow step and tell which command, mode and model to use (minimal cost)"
 model: "Claude Haiku 5.5"
 ---

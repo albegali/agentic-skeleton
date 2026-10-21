@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — clickable mockup (or map of the existing design) and the screen ↔ FR map"
 model: "Claude Sonnet 5.5"
 ---

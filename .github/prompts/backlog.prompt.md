@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — epics and user stories in backlog/stories.toml, then generate the Story files"
 model: "Claude Sonnet 5.5"
 ---

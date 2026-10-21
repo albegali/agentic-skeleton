@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — close a reviewed story: RUN Closed, merge its PR only, re-verify main"
 model: "Claude Haiku 5.5"
 ---

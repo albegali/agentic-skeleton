@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Analyst mode — Refined Story after the workshop (requires the minutes)"
 model: "Claude Sonnet 5.5"
 ---

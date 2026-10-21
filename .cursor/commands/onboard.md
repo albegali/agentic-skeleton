@@ -5,6 +5,6 @@ Inception (existing codebase) — document the code as it is: architecture, retr
 
 Arguments: [focus areas, docs to read, constraints]
 
-> Recommended model: **opus** (tier `deep`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Opus 5.5** (tier `deep`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/onboard.md`. Notes: <the text typed after the command>

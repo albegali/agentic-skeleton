@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Review mode — independent review of one story before closure; records the outcome in RUN §11"
 model: "Claude Sonnet 5.5"
 ---

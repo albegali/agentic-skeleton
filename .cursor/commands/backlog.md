@@ -5,6 +5,6 @@ Inception — epics and user stories in backlog/stories.toml, then generate the 
 
 Arguments: [epic or FR scope]  (empty = whole backlog)
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/backlog.md`. Scope: <the text typed after the command>

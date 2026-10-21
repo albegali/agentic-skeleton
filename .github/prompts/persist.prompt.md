@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — persistence/reconciliation, story PR and CI result (RUN → Persisted; nothing merged)"
 model: "Claude Sonnet 5.5"
 ---

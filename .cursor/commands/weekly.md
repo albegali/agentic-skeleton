@@ -3,6 +3,6 @@
 
 Project journal — weekly summary (minimal cost)
 
-> Recommended model: **haiku** (tier `fast`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Haiku 5.5** (tier `fast`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/weekly.md`.

@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception (existing codebase) — document the code as it is: architecture, retroactive ADRs, package rules, FR index, summary, vision"
 model: "Claude Opus 5.5"
 ---

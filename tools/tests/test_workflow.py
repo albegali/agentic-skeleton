@@ -335,6 +335,25 @@ class WorkflowTest(unittest.TestCase):
         r.toml_set("project.toml", "git", "merge", "rebase")
         r.run("tools/check_workflow.py")
 
+    def test_adapters_follow_each_tools_conventions(self):
+        r = self.r
+        skill = r.read(".agents/skills/brief/SKILL.md")
+        self.assertTrue(skill.startswith("---\nname: brief\ndescription: "))
+        self.assertIn("Use only when the user types $brief.", skill)
+        self.assertIn('[profiles.deep]\nmodel = "gpt-5"', r.read(".codex/config.toml"))
+        prompt = r.read(".github/prompts/run.prompt.md")
+        self.assertIn("agent: 'agent'", prompt)
+        self.assertNotIn("mode:", prompt)
+        self.assertEqual(prompt.count("Arguments"), 1)
+        self.assertIn("model: ", r.read(".github/agents/reviewer.agent.md"))
+        self.assertIn("Claude Sonnet 5.5", r.read(".cursor/commands/brief.md"))
+        n = r.next()
+        self.assertEqual((n["commands"]["claude-code"], n["commands"]["codex"]), ("/kickoff", "$kickoff"))
+        r.write(".codex/config.toml", 'model = "my-own"\n')  # the project's own Codex config is kept
+        r.run("tools/render_agents.py")
+        self.assertEqual(r.read(".codex/config.toml"), 'model = "my-own"\n')
+        r.run("tools/check_workflow.py")
+
     def test_stale_adapter_detected(self):
         with open(os.path.join(self.r.dir, ".claude/commands/next.md"), "a") as f:
             f.write("manual edit\n")

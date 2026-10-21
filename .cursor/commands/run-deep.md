@@ -5,7 +5,7 @@ Developer mode — /run on the deep tier, for L/XL stories (same arguments and p
 
 Arguments: <ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]
 
-> Recommended model: **opus** (tier `deep`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Opus 5.5** (tier `deep`, see models.toml). Switch to it before running this command.
 
 Arguments: <the text typed after the command>.
 

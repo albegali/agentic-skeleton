@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import wf  # noqa: E402
 
 COMMAND_RX = re.compile(r"<command-name>/?([\w:-]+)</command-name>")
-CODEX_COMMAND_RX = re.compile(r"^/(?:prompts:)?([\w-]+)")
+CODEX_COMMAND_RX = re.compile(r"^(?:/(?:prompts:)?|\$)([\w-]+)")  # /prompts:name (custom prompt) or $name (skill)
 REJECTED = "tool use was rejected"
 INTERRUPTED = "[Request interrupted by user"
 # tool built-ins: never a workflow step, so they neither label nor split a session

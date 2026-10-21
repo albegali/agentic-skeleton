@@ -5,7 +5,7 @@ Developer mode — persistence/reconciliation, story PR and CI result (RUN → P
 
 Arguments: <ID>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Developer mode, ID <the text typed after the command> (`delivery/AGENT_GUIDE.md` §5, step 7).
 1. Update the Spec (§11) and only the `reference/` docs touched by the story.

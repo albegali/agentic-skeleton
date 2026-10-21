@@ -160,13 +160,13 @@ The adapters are already generated for all four tools. You can narrow the list d
 | Tool | What to do once | How you run a command |
 |---|---|---|
 | **Claude Code** | Open the folder (`claude` in the terminal or the IDE extension). `.claude/commands/` and `.claude/settings.json` are picked up automatically. | `/next`, `/kickoff …` |
-| **Codex CLI** | `make codex-prompts` links the prompts into `~/.codex/prompts` (Codex reads prompts only from there). `AGENTS.md` is read natively. | `/prompts:next`, `/prompts:kickoff …` |
+| **Codex CLI** | Skills in `.agents/skills/` (shared through the repository); profiles per tier in `.codex/config.toml`. `AGENTS.md` is read natively. | `$next`, `$kickoff …` (`codex -p deep` for the deep tier) |
 | **GitHub Copilot** (VS Code) | Open the folder; prompt files in `.github/prompts/` show up in Copilot Chat in agent mode. If they don't, enable prompt files in the VS Code settings (`chat.promptFiles`). | `/next`, `/kickoff` |
 | **Cursor** | Open the folder; `.cursor/commands/` and `.cursor/rules/workflow.mdc` are picked up. | `/next`, `/kickoff` |
 
 **Models.** Claude Code and Copilot switch model automatically, because each command pins one. Codex and Cursor print `> Recommended model: …` at the top of the command: select that model before you send it (in Codex, `codex -m <model>` or `/model`).
 
-> The OpenAI and Google model names in `models.toml`, and the Copilot labels, are suggestions marked `verify`. Run `/choose-models` (§5.2) before real work.
+> The OpenAI model names in `models.toml`, and the Copilot and Cursor labels, are suggestions marked `verify` (to use Gemini, add a `[vendors.google]` block and point a tool at it). Run `/choose-models` (§5.2) before real work.
 
 **Permissions (Claude Code).** `.claude/settings.json` pre-allows the read-only workflow commands (`make next`, `make check`, `python3 tools/…`, `git diff/log/status`) and denies `git push --force`, `terraform apply` and reading `.env`. Personal additions belong in `.claude/settings.local.json`, which is not generated.
 
@@ -476,7 +476,7 @@ What you should do:
 | Stack commands | `project.toml` `[stack]` | `make setup / test / lint` |
 | CI | `.github/workflows/workflow-check.yml` or `azure-pipelines-workflow.yml` | add your build and test jobs next to `make check` |
 
-Never edit generated files (`.claude/commands`, `.codex/prompts`, `.github/prompts`, `.cursor/commands`, `CLAUDE.md`, `workflow/STEPS.md`): `make check` flags them as stale and `make agents` overwrites them.
+Never edit generated files (`.claude/commands`, `.agents/skills`, `.codex/prompts`, `.codex/config.toml`, `.github/prompts`, `.github/agents`, `.cursor/commands`, `CLAUDE.md`, `workflow/STEPS.md`): `make check` flags them as stale and `make agents` overwrites them.
 
 ---
 
@@ -514,7 +514,7 @@ Resolve generated files by running `make agents` rather than merging them by han
 | `make check`: `unknown FR-xx` | a story cites a requirement that doesn't exist (or isn't a `### FR-xx` heading) |
 | `make check`: `dependency cycle` | fix `deps` in `stories.toml` |
 | `make check`: `status … without recorded approval` | a RUN moved past Draft without `- [x] Approved` in §2 |
-| Codex: `/prompts:next` not found | run `make codex-prompts`, then restart Codex |
+| Codex: `$next` not found | restart Codex in the repository root (skills are read from `.agents/skills/`); run `make agents` if the folder is missing |
 | Copilot: wrong or unknown model | the labels in `models.toml` `[tools.copilot] models` must match your Copilot model picker; fix them, then `make agents` |
 | Copilot: prompts not listed | use agent mode in Copilot Chat; enable prompt files in the VS Code settings |
 | `make setup/test/lint`: "not defined yet" | run `/architecture`, or fill `project.toml` `[stack]` |

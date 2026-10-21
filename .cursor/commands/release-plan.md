@@ -5,6 +5,6 @@ Inception — releases and sprints in PLAN.md, respecting dependencies
 
 Arguments: [sprint length, team capacity, milestones]
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/plan.md`. Constraints: <the text typed after the command>
