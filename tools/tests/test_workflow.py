@@ -1287,7 +1287,7 @@ class UpgradeTest(unittest.TestCase):
     def upgrade(self, ok: bool = True, *a: str) -> subprocess.CompletedProcess:
         env = {k: v for k, v in os.environ.items() if k != "WF_ROOT"}
         r = subprocess.run([sys.executable, os.path.join(self.skel.dir, "tools/adopt.py"), self.proj, "--upgrade", *a],
-                           capture_output=True, text=True, env=env)
+                           capture_output=True, text=True, encoding="utf-8", env=env)  # the tools print UTF-8 on every console
         self.assertEqual(r.returncode == 0, ok, r.stdout + r.stderr)
         return r
 
