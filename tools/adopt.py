@@ -56,7 +56,8 @@ def skeleton_files() -> list[str]:
     try:
         files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=SRC, capture_output=True, text=True, check=True).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError):
-        files = [os.path.relpath(os.path.join(d, n), SRC) for d, _, ns in os.walk(SRC) for n in ns if "/.git/" not in d + "/"]
+        files = [os.path.relpath(os.path.join(d, n), SRC).replace(os.sep, "/") for d, _, ns in os.walk(SRC) for n in ns
+                 if f"{os.sep}.git{os.sep}" not in d + os.sep]  # not a git checkout: same `/` paths as git ls-files
     return sorted(f for f in files if f not in NOT_INSTALLED and any(seg_match(f, p) for p in INSTALL))
 
 

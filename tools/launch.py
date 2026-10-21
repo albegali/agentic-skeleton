@@ -18,6 +18,11 @@ import urllib.request
 import webbrowser
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+for _s in (sys.stdout, sys.stderr):  # prints → : a cp1252 console (Windows) must not crash
+    try:
+        _s.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
 
 
 def stack() -> dict:

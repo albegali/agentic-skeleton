@@ -131,7 +131,7 @@ def tracked_files(root: str) -> tuple[list[str], int]:
         files = []
         for d, dirs, names in os.walk(root):
             dirs[:] = sorted(x for x in dirs if x not in BUILD_OUT and x != ".git")
-            files += [os.path.relpath(os.path.join(d, n), root) for n in names]
+            files += [os.path.relpath(os.path.join(d, n), root).replace(os.sep, "/") for n in names]  # `/` as git ls-files
     kept = [f for f in files if not any(part in VENDORED for part in f.split("/")[:-1])]
     return sorted(kept), len(files) - len(kept)
 

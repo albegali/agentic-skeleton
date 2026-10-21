@@ -104,7 +104,7 @@ class Repo:
         self.write("project.toml", p)
 
     def run(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, *args], cwd=self.dir, env=self.env, capture_output=True, text=True, encoding="utf-8")
         if ok and r.returncode != 0:
             raise AssertionError(f"{args} failed:\n{r.stdout}\n{r.stderr}")
         return r
@@ -575,13 +575,13 @@ class AdoptTest(unittest.TestCase):
         shutil.rmtree(self.t, ignore_errors=True)
 
     def adopt(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, "tools/adopt.py", self.t, *a], cwd=self.r.dir, env=self.env, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, "tools/adopt.py", self.t, *a], cwd=self.r.dir, env=self.env, capture_output=True, text=True, encoding="utf-8")
         if ok and r.returncode != 0:
             raise AssertionError(f"adopt failed:\n{r.stdout}\n{r.stderr}")
         return r
 
     def tool(self, *a: str, ok: bool = True) -> subprocess.CompletedProcess:
-        r = subprocess.run([sys.executable, *a], cwd=self.t, env=self.env, capture_output=True, text=True)
+        r = subprocess.run([sys.executable, *a], cwd=self.t, env=self.env, capture_output=True, text=True, encoding="utf-8")
         if ok and r.returncode != 0:
             raise AssertionError(f"{a} failed:\n{r.stdout}\n{r.stderr}")
         return r

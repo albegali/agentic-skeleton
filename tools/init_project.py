@@ -79,8 +79,10 @@ def main() -> None:
     tools = [t.strip() for t in a.tools.split(",") if t.strip()]
     if err := validate(a.prefix, a.language, tools):
         sys.exit(err)
-    srcs = [wf.rel(os.path.abspath(x)) if os.path.isabs(x) else os.path.normpath(x) for x in (a.sources or [])]
-    design = (wf.rel(os.path.abspath(a.design)) if os.path.isabs(a.design) else os.path.normpath(a.design)) if a.design else None
+    def norm(x: str) -> str:  # recorded relative to the root, with `/` on every OS
+        return wf.rel(os.path.abspath(x)) if os.path.isabs(x) else os.path.normpath(x).replace(os.sep, "/")
+    srcs = [norm(x) for x in (a.sources or [])]
+    design = norm(a.design) if a.design else None
     missing = [x for x in srcs + ([design] if design else []) if not wf.exists(x)]
     if missing:
         sys.exit(f"source not found (paths are relative to the repository root): {', '.join(missing)}")
