@@ -16,6 +16,10 @@ mockup = true                # include the /mockup step in the lifecycle
 sources = []                 # kickoff sources (brief, transcripts, notes): read by steps with `sources = true`
 design = ""                  # existing design or prototype: /mockup maps it instead of building a new one
 
+[git]
+# Delivery git rules: delivery/guide/git.md
+merge = "squash"             # how /close merges the story's PR: squash | merge | rebase
+
 [portal]
 # Agentic portal, started by `make portal` (tools/portal.py). Uncomment to pin a release:
 # version = "x.y.z"

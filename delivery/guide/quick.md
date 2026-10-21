@@ -1,6 +1,6 @@
 # Quick track: bug, hotfix, chore, XS
 
-For `type = "bug" | "hotfix" | "chore"` or `size = "XS"` in `backlog/stories.toml`. No Analysis or workshop (unless `skip_analysis = false`). Same artifacts as the standard flow — Brief, Spec, RUN — written in one session (`/quick <ID>`), with **one human approval** covering the Spec and the RUN strategy (`/run <ID> approve`). Execution, tuning, persistence and review are unchanged.
+For `type = "bug" | "hotfix" | "chore"` or `size = "XS"` in `backlog/stories.toml`. No Analysis or workshop (unless `skip_analysis = false`). Same artifacts as the standard flow — Brief, Spec, RUN — written in one session (`/quick <ID>`), with **one human approval** covering the Spec and the RUN strategy (`/run <ID> approve`). Execution, tuning, persistence, review and closure are unchanged.
 
 ## Bug and hotfix
 - **Brief**: `Type: Bug` or `Hotfix`, urgency, §3 Impact (who is affected, what is broken), reproduction steps, external reference.

@@ -6,15 +6,14 @@
 - Started at (datetime):
   - Fill only when execution starts after human approval, immediately before the first code or test change.
 - Completed at (datetime):
-  - Fill only when the RUN is ready to close after verification, tuning and persistence.
-  - If tuning or follow-up changes happen before closure, update this to the latest completion datetime.
+  - Fill at `/close`, after the review.
 
 ---
 
 ## Status
-Draft → Strategy Approved → Executing → Tuning → Persisted → Closed  ·  Stopped / Blocked / Cancelled
+Draft → Strategy Approved → Executing → Tuning → Persisted → Reviewed → Closed  ·  Stopped / Blocked / Cancelled
 
-> A RUN MUST NOT be Closed before Persisted.
+> A RUN MUST NOT be Closed before Persisted and Reviewed (§11).
 > Stopped: the human stopped it at §2 (resume with `/run <ID> revise: …`). Blocked: a §6 deviation awaits approval
 > (`/run <ID> approve-deviation <n>`). Cancelled: the story was dropped (`/run <ID> cancel: …`); terminal.
 
@@ -147,6 +146,8 @@ Summary:
 - [ ] No scope creep
 - [ ] Persistence completed
 
+CI: green / red / none (no remote) — <PR URL>
+
 ---
 
 # 9. Outcome
@@ -172,6 +173,20 @@ Summary:
 - Follow-ups:
 - Risks:
 - Improvements:
+
+---
+
+# 11. Review
+
+> Written by `/review-story` (review mode), one entry per review, newest last. `ok-to-close` → RUN `Reviewed`;
+> `changes-requested` → RUN `Tuning`, findings applied with `/run <ID> tuning: …`, then `/persist` and a new review.
+
+### Review #1
+- Date:
+- Reviewer:
+- Outcome: `ok-to-close` / `changes-requested`
+- Findings:
+  - …
 
 ---
 

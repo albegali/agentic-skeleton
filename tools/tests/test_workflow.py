@@ -606,6 +606,42 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertIn("RUN-DM0101: Closed with unchecked quality gates: No scope creep", errors)
         self.assertIn("RUN-DM0101: Closed without Persistence", errors)  # the [x] in §9 does not count for §7
 
+    def test_review_then_close(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0101"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `{o}`\n"
+        # persisted → review (agent); the review asks for changes → back to Tuning (human), findings named
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Persisted", plan="build", ok="x"))
+        self.assertEqual((r.next(i)["step"], r.next(i)["owner"]), ("review", "agent"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Tuning", plan="build", ok="x") + review.format(o="changes-requested"))
+        n = r.next(i)
+        self.assertEqual((n["step"], n["owner"]), ("tuning", "human"))
+        self.assertIn("review #1 requested changes", n["why"])
+        # Reviewed with an ok-to-close review → close, recommended ahead of other work in the sprint
+        ok = RUN.format(i=i, st="Reviewed", plan="build", ok="x") + review.format(o="changes-requested") \
+            + "### Review #2\n- Date: 2026-10-22\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", ok)
+        self.assertEqual((r.next(i)["step"], r.next(i)["owner"]), ("close", "agent"))
+        self.assertEqual((r.next()["step"], r.next()["ids"]), ("close", [i]))
+        self.assertIn("/close DM0101", r.run("tools/next_step.py").stdout)
+        self.assertNotIn(f"RUN-{i}", " ".join(self.check()[0]))
+        # Reviewed or Closed without an ok-to-close review: an error, and the review runs again
+        for st, rec in (("Reviewed", ""), ("Reviewed", review.format(o="changes-requested")),
+                        ("Closed", review.format(o="`ok-to-close` / `changes-requested`")), ("Closed", review.replace("2026-10-21", "").format(o="ok-to-close"))):
+            r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st=st, plan="build", ok="x") + rec)
+            self.assertIn(f"RUN-{i}: {st} without a review record (§11 latest `### Review #n` with Date and Outcome `ok-to-close`)",
+                          self.check(False)[0], (st, rec))
+            if st == "Reviewed":
+                self.assertEqual(r.next(i)["step"], "review")
+        # a RUN closed before §11 existed: a warning only
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Closed", plan="build", ok="x"))
+        errors, warnings = self.check()
+        self.assertTrue(any(w.startswith(f"RUN-{i}: Closed without a §11 Review") for w in warnings), warnings)
+        self.assertEqual(r.next(i)["step"], "done")
+
     def test_plan_matches_the_backlog(self):
         r = self.r
         r.through_inception()

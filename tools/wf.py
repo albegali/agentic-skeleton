@@ -269,7 +269,7 @@ STATUSES = {
     "brief": ("Captured", "Refined into Spec", "Superseded", "Closed"),
     "spec": ("Draft", "Ready", "In Progress", "Done", "Blocked", "Cancelled"),
     "spike": ("Draft", "Accepted"),
-    "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed", "Stopped", "Blocked", "Cancelled"),
+    "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Reviewed", "Closed", "Stopped", "Blocked", "Cancelled"),
 }
 
 
@@ -316,6 +316,22 @@ def open_deviations(text: str) -> list[str]:
         if needs and not re.search(r"^\s*-\s*Approved by:[ \t]*\S", body, re.M):
             out.append(m.group(1))
     return out
+
+
+REVIEW_OUTCOMES = ("ok-to-close", "changes-requested")
+
+
+def run_review(text: str) -> dict | None:
+    """Latest RUN §11 `### Review #n` entry: {n, date, outcome}; outcome None unless exactly one code is written
+    (the template line lists both). None when §11 has no entry."""
+    last = None
+    for m in re.finditer(r"^###\s+Review\s+#(\d+)\b(.*?)(?=^#{1,3}\s|\Z)", heading_section(text, r"^#\s+11\.") or "", re.M | re.S):
+        body = m.group(2)
+        date = re.search(r"^\s*-\s*Date:[ \t]*(\S[^\n]*)$", body, re.M)
+        line = re.search(r"^\s*-\s*Outcome:([^\n]*)$", body, re.M)
+        codes = [c for c in REVIEW_OUTCOMES if line and c in line.group(1).lower()]
+        last = {"n": m.group(1), "date": date.group(1).strip() if date else "", "outcome": codes[0] if len(codes) == 1 else None}
+    return last
 
 
 def strategy_written(text: str) -> bool:

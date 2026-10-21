@@ -32,7 +32,7 @@ It assumes you know git and have used at least one AI coding tool. You do not ne
 ```
 INCEPTION  /kickoff → /requirements → /mockup → /architecture → /backlog → /release-plan
 ANALYSIS   per story:  /analysis → workshop (you) → /refine
-DELIVERY   per story:  /brief → Spec review (you) → /run (strategy) → approve (you) → execution → tuning (you) → /persist → /review-story
+DELIVERY   per story:  /brief → Spec review (you) → /run (strategy) → approve (you) → execution → tuning (you) → /persist → /review-story → /close
 JOURNAL    weekly:     /weekly
 ```
 
@@ -349,14 +349,16 @@ The Analysis chat reply lists only the high-impact questions: that is your works
 | Approval | **you** | `/run CP0101 approve` (same session) | recorded in RUN §2, Spec → In Progress, then execution starts |
 | Execution | agent | (continues) or `/run CP0101` to resume | code and tests step by step, RUN §3-4 updated; RUN → Tuning when every step is done, Blocked on a deviation that needs you (`/run CP0101 approve-deviation 1`) |
 | Tuning | **you** → agent | `/run CP0101 tuning: the export ignores filters` | in-scope fixes, logged in RUN §5 |
-| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; RUN → Persisted → Closed, Spec → Done; `make check` |
-| Review | agent, fresh eyes | `/review-story CP0101` | `file:line → problem → request`, or "OK to close" |
+| Persistence | agent | `/persist CP0101` | Spec §11 and reference docs reconciled; RUN → Persisted, Spec → Done; `make check`; story PR opened, CI result recorded in RUN §8. Nothing merged. |
+| Review | agent, fresh eyes | `/review-story CP0101` | RUN §11 entry: `ok-to-close` → RUN Reviewed; `changes-requested` → RUN back to Tuning with `file:line → problem → request` |
+| Closure | agent | `/close CP0101` | RUN → Closed, Brief closed; **only this story's PR** merged after its required checks; `main` re-verified; other branches listed, never touched ([git rules](../delivery/guide/git.md)) |
 
 Rules agents follow, and that you can hold them to:
 - no code before the strategy is approved;
 - nothing beyond the Spec: out-of-scope work stops or becomes a logged deviation;
 - the RUN is append-only: if it is not in the RUN, it did not happen;
-- a RUN is never Closed before it is Persisted.
+- a RUN is never Closed before it is Persisted and reviewed (`make check` enforces the RUN §11 record);
+- a story merges only its own PR, after green CI; protect `main` (required checks, optionally one review) as in [git rules](../delivery/guide/git.md#recommended-repository-settings).
 
 ### 6.3 A typical day
 

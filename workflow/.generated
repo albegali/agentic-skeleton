@@ -7,6 +7,7 @@
 .claude/commands/backlog.md
 .claude/commands/brief.md
 .claude/commands/choose-models.md
+.claude/commands/close.md
 .claude/commands/kickoff.md
 .claude/commands/mockup.md
 .claude/commands/next.md
@@ -27,6 +28,7 @@
 .codex/prompts/backlog.md
 .codex/prompts/brief.md
 .codex/prompts/choose-models.md
+.codex/prompts/close.md
 .codex/prompts/kickoff.md
 .codex/prompts/mockup.md
 .codex/prompts/next.md
@@ -46,6 +48,7 @@
 .cursor/commands/backlog.md
 .cursor/commands/brief.md
 .cursor/commands/choose-models.md
+.cursor/commands/close.md
 .cursor/commands/kickoff.md
 .cursor/commands/mockup.md
 .cursor/commands/next.md
@@ -67,6 +70,7 @@
 .github/prompts/backlog.prompt.md
 .github/prompts/brief.prompt.md
 .github/prompts/choose-models.prompt.md
+.github/prompts/close.prompt.md
 .github/prompts/kickoff.prompt.md
 .github/prompts/mockup.prompt.md
 .github/prompts/next.prompt.md
