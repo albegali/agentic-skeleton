@@ -9,6 +9,6 @@
 | `spec-approval` | Review the Spec; status → `Ready` | `/run <ID>` |
 | `run-approval` | Approve or revise the strategy | `/run <ID> approve` |
 | `tuning` | Verify, tune, close (`workflow/steps/tuning.md`) | `/persist <ID>` |
-| `blocked` | Unblock the Spec (decision, dependency) | `make next` |
+| `blocked` | Unblock the Spec (decision, dependency), or fix the unknown status value the detail names | `make next` |
 
 Meanwhile the analyst can work ahead: `make next` proposes it when later sprints miss Analysis.

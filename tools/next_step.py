@@ -19,9 +19,6 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 import wf  # noqa: E402
 
-APPROVED = {"approved", "accepted"}
-
-
 # ---------------------------------------------------------------- inception
 
 def inception() -> dict | None:
@@ -50,27 +47,45 @@ def inception() -> dict | None:
             return {"step": step, "owner": "agent", "ids": [], "why": f"missing: {', '.join(missing)}"}
         if step == "backlog" and not wf.stories():
             return {"step": step, "owner": "agent", "ids": [], "why": "backlog/stories.toml has no stories"}
-        pending = [f for f in files if (wf.artifact_status(f) or "draft") not in APPROVED]
+        pending, unknown = [], []
+        for f in files:
+            raw = wf.artifact_status(f)
+            if wf.status("inception", raw or "draft") != "approved":
+                pending.append(f)
+                if raw and not wf.status("inception", raw):
+                    unknown.append(f"{f}: unknown status '{raw}' (expected {wf.expected('inception')})")
         if step in ("architecture", "onboard"):
-            pending += [wf.rel(p) for p in wf.matches("reference/architecture/ADR-*.md")
-                        if (wf.front(wf.read(p), "status") or "proposed") not in APPROVED and "superseded" not in (wf.front(wf.read(p), "status") or "")]
+            for p in wf.matches("reference/architecture/ADR-*.md"):
+                raw = wf.front(wf.read(p), "status")
+                if wf.status("adr", raw or "proposed") not in ("accepted", "superseded", "rejected"):
+                    pending.append(wf.rel(p))
+                    if raw and not wf.status("adr", raw):
+                        unknown.append(f"{wf.rel(p)}: unknown status '{raw}' (expected {wf.expected('adr')})")
             if not wf.project().get("stack", {}).get("decided"):
                 pending.append("project.toml [stack] decided = true")
         if pending:
             return {"step": "approve", "owner": "human", "ids": [], "files": pending, "after": step,
-                    "why": f"waiting for your approval ({step}): {', '.join(pending)}"}
+                    "why": f"waiting for your approval ({step}): {', '.join(pending)}" + "".join(f"; {u}" for u in unknown)}
     return None
 
 
 # ---------------------------------------------------------------- per-story stage
+
+def bad_status(path: str, kind: str, raw: str) -> tuple[str, str, str]:
+    """An unrecognised status never passes a gate: a human fixes the file."""
+    return ("blocked", f"{wf.rel(path)}: unknown status '{raw}' (expected {wf.expected(kind)})", "human")
+
 
 def stage(i: str) -> tuple[str, str, str]:
     """(stage, detail, owner) — owner: agent | human | done."""
     analysis, refined, brief, spec, run = (wf.find(k, i) for k in ("analysis", "refined", "brief", "spec", "run"))
     if run:
         t = wf.read(run)
-        st = wf.md_status(t) or "Draft"
-        approved = bool(re.search(r"-\s*\[x\]\s*Approved", t))
+        raw = wf.md_status(t) or "Draft"
+        st = wf.status("run", raw)
+        if not st:
+            return bad_status(run, "run", raw)
+        approved = wf.run_approved(t)
         if st == "Closed":
             return ("done", "RUN closed", "done")
         if st == "Persisted":
@@ -80,12 +95,15 @@ def stage(i: str) -> tuple[str, str, str]:
         if st in ("Strategy Approved", "Executing"):
             return ("execute", f"RUN {st}", "agent")
         if not approved:
-            if "### Plan" in t and re.search(r"- Step 1: (?!…)", t):
+            if wf.strategy_written(t):
                 return ("run-approval", "strategy written, human approval missing (RUN §2)", "human")
             return ("run-strategy", "RUN draft without strategy", "agent")
         return ("execute", "strategy approved", "agent")
     if spec:
-        st = wf.md_status(wf.read(spec)) or "Draft"
+        raw = wf.md_status(wf.read(spec)) or "Draft"
+        st = wf.status("spec", raw)
+        if not st:
+            return bad_status(spec, "spec", raw)
         if st == "Draft":
             return ("spec-approval", "Spec draft: human review, status → Ready", "human")
         if st == "Blocked":
@@ -95,14 +113,20 @@ def stage(i: str) -> tuple[str, str, str]:
         return ("brief-spec", "Brief present, Spec missing", "agent")
     if refined:
         t = wf.read(refined)
-        st = wf.front(t, "status") or "draft"
+        raw = wf.front(t, "status") or "draft"
+        st = wf.status("refined", raw)
+        if not st:
+            return bad_status(refined, "refined", raw)
         if refined_not_ready(t):
             return ("workshop", "Refined Story 'not ready': another refinement is needed", "human")
         if st in ("refined", "approved"):
             return ("brief-spec", f"Refined Story {st}: ready for the Brief", "agent")
         return ("refine", f"Refined Story {st}: to be completed", "agent")
     if analysis:
-        st = wf.front(wf.read(analysis), "status") or "draft"
+        raw = wf.front(wf.read(analysis), "status") or "draft"
+        st = wf.status("analysis", raw)
+        if not st:
+            return bad_status(analysis, "analysis", raw)
         return ("workshop", f"Analysis {st}: workshop needed, then the Refined Story with its evidence", "human")
     return ("analysis", "no artifact yet", "agent")
 
