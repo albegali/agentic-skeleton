@@ -451,7 +451,9 @@ What you should do:
 | Small or technical story | `skip_analysis = true` in `stories.toml`: `make next` goes straight to `/brief` |
 | Decision reversed | new ADR with `status: accepted` and the old one `superseded by ADR-xxx`; mention it in the weekly |
 | Clarification after the Brief is frozen | add an Brief Addendum (§8) and update the Spec; never rewrite the original intent |
-| Production bug | hotfix flow: Brief (Hotfix) → RUN → Spec reconciliation (`delivery/guide/hotfix.md`) |
+| Production bug | story with `type = "hotfix"` (no need to plan it) → `/quick <ID>`: Brief, Spec with root cause and regression test, RUN strategy, one approval; `make next` puts it ahead of the sprint (`delivery/guide/quick.md`) |
+| Bug, dependency upgrade, tiny change | `type = "bug"` / `"chore"` or `size = "XS"` → `/quick <ID>` (chores get preset regression gates) |
+| Open question before committing to a design | `type = "spike"` → `/spike <ID> [time-box]`: findings note in `delivery/40-spikes/`, follow-up stories, no code merged |
 | Refactor or NFR work | normal flow with the extra fields in `delivery/guide/refactor-nfr.md` |
 | Adopting an external tracker | keep the workflow IDs, record the tracker's ID as `tracker_id` in `backlog/stories.toml`; add a tracker adapter (`tools/README.md`) |
 

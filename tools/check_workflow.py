@@ -3,12 +3,14 @@
 
 Inception: unique FR/NFR IDs; ADR numbering; mockup map cites existing FRs.
 Backlog:   stories.toml schema; story IDs match project.toml prefix; epics exist; deps, supersedes, split_from exist and deps
-           are acyclic; FR/NFR links exist; Must FRs covered; superseded story without successor, dependency on a cancelled story. PLAN.md ↔ backlog: unknown IDs/epics, unplanned or twice-planned stories, a dependency planned
-           after its dependant, sprint capacity (frontmatter `capacity:`), Must stories planned after their release target,
-           sprints past their end date with open stories.
-Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN; Spec ↔ Brief; RUN ↔ Spec; status values; approval before execution;
-           Persistence (§7) before Closed; Blocked RUN without an open §6 deviation; RUN still open on a cancelled story; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template
-           placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
+           are acyclic; FR/NFR links exist; Must FRs covered; superseded story without successor; dependency on a cancelled
+           story. PLAN.md ↔ backlog: unknown IDs/epics, unplanned (hotfixes exempt) or twice-planned stories, a dependency
+           planned after its dependant, sprint capacity (frontmatter `capacity:`), Must stories planned after their release
+           target, sprints past their end date with open stories.
+Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN/spike note; Spec ↔ Brief; RUN ↔ Spec; status values; approval
+           before execution; Persistence (§7) before Closed; Blocked RUN without an open §6 deviation; RUN still open on a
+           cancelled story; Spec Done / RUN Closed with an unchecked acceptance criterion or gate; template placeholders left
+           in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line.
 Adapters:  generated tool files are up to date (tools/render_agents.py --check).
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
            (same exit code: a workflow with errors is still a successful check, reported in data).
@@ -171,7 +173,7 @@ def check_plan() -> None:
         elif len(sps) > 1:
             W.append(f"PLAN.md: {i} planned in more than one sprint ({', '.join(sps)})")
     if rows:
-        unplanned = [i for i in st if i not in where]
+        unplanned = [i for i in st if i not in where and st[i].get("type") != "hotfix"]  # hotfixes run outside the plan
         if unplanned:
             W.append(f"PLAN.md: stories in no sprint: {', '.join(unplanned)}")
     order = {sp["sprint"]: n for n, sp in enumerate(rows)}
@@ -245,6 +247,7 @@ def check_chain() -> None:
         ("Brief", "delivery/10-briefs/*.md", rf"^BRIEF-{idrx}-[a-z0-9-]+\.md$"),
         ("Spec", "delivery/20-specs/SPEC-*.md", rf"^SPEC-{idrx}-[a-z0-9-]+\.md$"),
         ("RUN", "delivery/30-runs/*.md", rf"^RUN-{idrx}[a-z0-9-]*\.md$"),
+        ("Spike note", "delivery/40-spikes/*.md", rf"^SPIKE-{idrx}-[a-z0-9-]+\.md$"),
     ]:
         for p in wf.matches(pat):
             if not re.match(rx, os.path.basename(p)):
@@ -257,6 +260,8 @@ def check_chain() -> None:
         bad_status(wf.rel(p), "brief", wf.md_status(t))
         if wf.status("brief", wf.md_status(t)):
             check_placeholders(wf.rel(p), t)
+    for p in wf.matches("delivery/40-spikes/SPIKE-*.md"):
+        bad_status(wf.rel(p), "spike", wf.md_status(wf.read(p)))
     for p in wf.matches("analysis/30-refined/REFINED_*.md"):
         i = os.path.basename(p).split("_")[1]
         if not wf.matches(f"analysis/20-analysis/ANALYSIS_{i}_*.md"):

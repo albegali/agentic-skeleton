@@ -6,8 +6,9 @@
 |---|---|---|
 | `approve` | Review the inception artifact, set its status (`workflow/steps/approve.md`) | `make next` |
 | `workshop` | Refinement workshop and minutes (`workflow/steps/workshop.md`) | `/refine <ID> <minutes>` |
+| `spike-review` | Review the spike findings; status → `Accepted`, add the follow-ups (`workflow/steps/spike-review.md`) | `/backlog <follow-ups>` |
 | `spec-approval` | Review the Spec; status → `Ready` | `/run <ID>` |
-| `run-approval` | Approve or revise the strategy | `/run <ID> approve` |
+| `run-approval` | Approve or revise the strategy (quick track: the approval covers the Spec too) | `/run <ID> approve` |
 | `tuning` | Verify, tune, close (`workflow/steps/tuning.md`) | `/persist <ID>` |
 | `blocked` (RUN) | Read the RUN §6 deviation the detail names; approve it, or change the Spec / cancel | `/run <ID> approve-deviation <n>` · `/spec <ID> <change>` · `/run <ID> cancel: <reason>` |
 | `blocked` (Spec) | Unblock the Spec (decision, dependency) and set it back to `Ready`, or fix the unknown status value the detail names | `make next` |

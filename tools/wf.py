@@ -146,6 +146,23 @@ STORY_LINKS = ("supersedes", "split_from")  # another story's ID
 SIZES = ("XS", "S", "M", "L", "XL")
 PRIORITIES = ("Must", "Should", "Could", "Won't")
 STORY_STATES = ("open", "cancelled", "superseded")  # per-story `status`; cancelled / superseded count as done
+TYPES = ("feature", "technical", "bug", "hotfix", "chore", "refactor", "spike")
+QUICK_TYPES = ("bug", "hotfix", "chore")           # quick track: Brief + Spec + RUN strategy, one approval
+NO_ANALYSIS_TYPES = (*QUICK_TYPES, "refactor", "spike")
+
+
+def track(s: dict) -> str:
+    """Delivery track of a story: spike (findings note, no code merged) | quick (one approval) | standard."""
+    if s.get("type") == "spike":
+        return "spike"
+    return "quick" if s.get("type") in QUICK_TYPES or s.get("size") == "XS" else "standard"
+
+
+def skips_analysis(s: dict) -> bool:
+    """`skip_analysis` when set; otherwise true for non-feature work types and quick-track stories."""
+    if "skip_analysis" in s:
+        return s["skip_analysis"] is True
+    return s.get("type") in NO_ANALYSIS_TYPES or track(s) == "quick"
 POINTS = {"XS": 1, "S": 1, "M": 2, "L": 3, "XL": 5}  # default story points per size (PLAN.md `points:` overrides)
 
 
@@ -170,6 +187,8 @@ def backlog_errors() -> list[str]:
             out.append(f"{who}: size '{s.get('size')}' not in {' | '.join(SIZES)}")
         if s.get("priority") not in (None, *PRIORITIES):
             out.append(f"{who}: priority '{s.get('priority')}' not in {' | '.join(PRIORITIES)}")
+        if s.get("type") not in (None, *TYPES):
+            out.append(f"{who}: type '{s.get('type')}' not in {' | '.join(TYPES)}")
         if s.get("status") not in (None, *STORY_STATES):
             out.append(f"{who}: status '{s.get('status')}' not in {' | '.join(STORY_STATES)}")
         for k in STORY_LINKS:
@@ -249,6 +268,7 @@ STATUSES = {
     "refined": ("draft", "refined", "approved"),
     "brief": ("Captured", "Refined into Spec", "Superseded", "Closed"),
     "spec": ("Draft", "Ready", "In Progress", "Done", "Blocked", "Cancelled"),
+    "spike": ("Draft", "Accepted"),
     "run": ("Draft", "Strategy Approved", "Executing", "Tuning", "Persisted", "Closed", "Stopped", "Blocked", "Cancelled"),
 }
 
@@ -440,6 +460,7 @@ def journal() -> dict:
 CHAIN = {"story": "analysis/10-stories/STORY_{i}_*.md", "analysis": "analysis/20-analysis/ANALYSIS_{i}_*.md",
          "refined": "analysis/30-refined/REFINED_{i}_*.md", "brief": "delivery/10-briefs/BRIEF-{i}-*.md",
          "spec": "delivery/20-specs/SPEC-{i}-*.md", "run": "delivery/30-runs/RUN-{i}*.md"}
+SPIKE = "delivery/40-spikes/SPIKE-{i}-*.md"  # spike findings note (outside the chain: spikes have no Brief/Spec/RUN)
 
 
 def find(kind: str, i: str) -> str | None:

@@ -9,7 +9,7 @@ Arguments (<ID> [approve | revise: … | tuning: … | approve-deviation <n> | c
 Arguments: the arguments above.
 
 - ID only, no RUN or RUN in Draft without strategy → follow `workflow/steps/run-strategy.md`.
-- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`.
+- `approve` → record the approval in RUN §2 (Approved, reviewer = `project.toml` owner, today's date), status `Strategy Approved`, Spec status `In Progress`, then follow `workflow/steps/execute.md`. Quick track (`delivery/guide/quick.md`): this one approval also covers the Spec, which may still be `Draft`.
 - `revise: …` → update only the strategy (untick `Stopped` in §2, status `Draft`, note the request in §2) and stop again.
 - ID only with an approved strategy → resume following `workflow/steps/execute.md`.
 - `tuning: …` → in-scope fix recorded in RUN §5 (see `workflow/steps/tuning.md`).

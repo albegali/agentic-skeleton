@@ -78,7 +78,7 @@ RUN = """# RUN-{i}
 
 # project state written by the workflow: removed from the copy (README.md and .gitkeep stay), see Repo.fresh
 STATE_DIRS = ["analysis/10-stories", "analysis/20-analysis", "analysis/30-refined", "analysis/workshops", "analysis/output",
-              "delivery/10-briefs", "delivery/20-specs", "delivery/30-runs", "reference", "backlog", "docs/sources",
+              "delivery/10-briefs", "delivery/20-specs", "delivery/30-runs", "delivery/40-spikes", "reference", "backlog", "docs/sources",
               *(f"project-journal/{d}" for d in ("context", "decisions", "learnings", "metrics", "monthly", "risks", "weekly"))]
 FRESH_KEYS = [("project", "initialized", False), ("inception", "sources", []), ("inception", "design", ""),
               ("stack", "decided", False), *(("stack", k, "") for k in ("summary", "setup", "test", "lint", "run", "url"))]
@@ -724,6 +724,53 @@ class EdgeCaseTest(unittest.TestCase):
         errors, _ = self.check(False)
         self.assertIn("backlog/stories.toml: DM0101: status 'dropped' not in open | cancelled | superseded", errors)
         self.assertIn("backlog/stories.toml: DM0101: `skip_analysis` must be true or false", errors)
+
+    def test_quick_track_hotfix_first_and_spikes(self):
+        r = self.r
+        r.through_inception()
+        hotfix = '[[story]]\nid = "DM0103"\nepic = "EP-01"\nslug = "crash"\ntitle = "Crash"\ntype = "hotfix"\nsize = "S"\n' \
+                 'ac = [["a", "b", "c"]]\n'
+        stories = STORIES.format(st="approved").replace('slug = "export"', 'slug = "export"\ntype = "bug"') + hotfix
+        r.write("backlog/stories.toml", stories)
+        self.assertEqual(r.next("DM0102")["step"], "quick")
+        n = r.next()  # unplanned hotfix ahead of the sprint, and not reported as unplanned
+        self.assertEqual((n["step"], n["ids"], n["command"]), ("quick", ["DM0103"], "/quick DM0103"))
+        self.assertFalse(any("stories in no sprint" in w for w in self.check()[1]))
+        i = "DM0103"
+        r.write(f"delivery/10-briefs/BRIEF-{i}-crash.md", BRIEF_MD.format(i=i))
+        self.assertEqual(r.next(i)["step"], "quick")
+        r.write(f"delivery/20-specs/SPEC-{i}-crash.md", SPEC_MD.format(i=i, st="Draft"))
+        self.assertEqual(r.next(i)["step"], "quick")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Draft", plan="fix", ok=" "))
+        n = r.next()  # one approval covers Spec and strategy; meanwhile the agent goes on with the sprint
+        self.assertEqual((n["step"], n["human_gates"][0]["id"], n["human_gates"][0]["stage"]), ("analysis", i, "run-approval"))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Executing", plan="fix", ok="x"))
+        r.write(f"delivery/20-specs/SPEC-{i}-crash.md", SPEC_MD.format(i=i, st="In Progress"))
+        self.assertEqual((r.next()["step"], r.next()["ids"]), ("execute", [i]))
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Closed", plan="fix", ok="x"))
+        self.assertEqual(r.next()["ids"], ["DM0101"])  # back to the sprint order
+        # XS goes quick whatever the type; skip_analysis = false keeps the analysis
+        r.write("backlog/stories.toml", stories.replace('size = "M"', 'size = "XS"'))
+        self.assertEqual(r.next("DM0101")["step"], "quick")
+        r.write("backlog/stories.toml", stories.replace('type = "bug"', 'type = "bug"\nskip_analysis = false'))
+        self.assertEqual(r.next("DM0102")["step"], "analysis")
+        # spike: findings note, human review, accepted = done
+        r.write("backlog/stories.toml", stories.replace('type = "bug"', 'type = "spike"'))
+        self.assertEqual(r.next("DM0102")["step"], "spike")
+        ctx = r.run("tools/context.py", "spike", "DM0102").stdout
+        self.assertIn("SPIKE-template.md", ctx)
+        r.write("delivery/40-spikes/SPIKE-DM0102-export.md", "# SPIKE-DM0102\n## Status\nDraft\n")
+        self.assertEqual((r.next("DM0102")["step"], r.next("DM0102")["owner"]), ("spike-review", "human"))
+        r.write("delivery/40-spikes/SPIKE-DM0102-export.md", "# SPIKE-DM0102\n## Status\nAccepted\n")
+        self.assertEqual(r.next("DM0102")["step"], "done")
+        r.write("delivery/40-spikes/SPIKE_DM0102.md", "# x\n## Status\nDone\n")
+        r.write("delivery/40-spikes/SPIKE-DM0102-other.md", "# x\n## Status\nDone\n")
+        r.write("backlog/stories.toml", stories.replace('type = "bug"', 'type = "task"'))
+        errors, _ = self.check(False)
+        self.assertIn("Spike note naming: delivery/40-spikes/SPIKE_DM0102.md", errors)
+        self.assertIn("delivery/40-spikes/SPIKE-DM0102-other.md: invalid status 'Done' (expected Draft | Accepted)", errors)
+        self.assertIn("backlog/stories.toml: DM0102: type 'task' not in feature | technical | bug | hotfix | chore | refactor | spike",
+                      errors)
 
     def test_invalid_settings_json_is_reported(self):
         r = self.r

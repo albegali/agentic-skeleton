@@ -9,7 +9,9 @@ Agent-supervised coding, RUN-centric. Three artifacts, three questions:
 | **RUN** | `delivery/30-runs/RUN-<ID>.md` | *what happened* — execution trace | Draft → Strategy Approved → Executing → Tuning → Persisted → Closed · Stopped / Blocked / Cancelled |
 
 Tasks: `TSK-<ID>-NN`. IDs are stable for the life of the work item. Templates in `delivery/templates/` are authoritative.
-Sections loaded only when needed: `delivery/guide/run.md` (RUN rules), `delivery/guide/hotfix.md`, `delivery/guide/refactor-nfr.md`.
+Sections loaded only when needed: `delivery/guide/run.md` (RUN rules), `delivery/guide/quick.md` (bug, hotfix, chore, XS), `delivery/guide/refactor-nfr.md`.
+
+Tracks by story `type` (`backlog/stories.toml`): **standard** (feature, technical, refactor) Brief → Spec (Ready) → RUN strategy (approve); **quick** (bug, hotfix, chore, or size XS) Brief + Spec + RUN strategy in one session, one approval (`/quick`); **spike** a findings note in `delivery/40-spikes/` (`/spike`), no Brief/Spec/RUN, no code merged. Hotfixes run ahead of the plan. Work types other than feature/technical skip the Analysis.
 
 ## 1. Principles
 1. Brief drives everything.
