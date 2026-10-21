@@ -15,7 +15,7 @@ Stdlib Python ≥ 3.11, no dependencies. Every script resolves the repository ro
 | `adopt.py` | `make adopt TARGET=…` | Installs the workflow into an existing repository without overwriting its files (marked blocks in `AGENTS.md` / `CLAUDE.md`, `include workflow.mk`, permissions union), detects the `[stack]` commands, sets `origin = "brownfield"`. Conflicts → nothing written. `--dry-run` prints the plan. Not installed in the target. |
 | `portal.py` | `make portal` | Start the agentic portal for this repository: downloads the pinned release bundle, verifies it, caches it in `.portal/<version>/`, starts it and opens the browser. See "Portal launcher". |
 | `repo_map.py` | `context.py --repo-map` | Cheap map of the codebase for `/onboard`: languages, tree with sizes, manifests, CI/infra, docs, entry points, tests, largest files, git hot spots. No file contents. |
-| `rename_id.py` | — | Replace a story ID everywhere (e.g. adopting tracker IDs). |
+| `rename_id.py` | — | Replace a story ID everywhere (whole IDs only, both in the project format; `--dry-run` lists the changes). |
 | `wf.py` | — | Shared helpers. |
 
 Tests: `make test-tools` (unittest, fixture repositories in temp dirs).
@@ -68,4 +68,4 @@ Session token: on each start the launcher generates a 256-bit token, writes it t
 4. `make agents && make check && make test-tools`.
 
 ## Tracker adapters
-`project.toml` → `tracker = "local"` keeps everything in the repository. To sync with an external tracker (Azure DevOps, Jira, GitHub Issues, Linear), add `tools/trackers/<name>.py` that reads `backlog/stories.toml` and the delivery artifacts and pushes/pulls through the tracker API; adopt the tracker IDs with `rename_id.py`. Keep it out of the agents' default permissions: syncing is an outward-facing action that a human triggers.
+`project.toml` → `tracker = "local"` keeps everything in the repository. To sync with an external tracker (Azure DevOps, Jira, GitHub Issues, Linear), add `tools/trackers/<name>.py` that reads `backlog/stories.toml` and the delivery artifacts and pushes/pulls through the tracker API; keep the workflow IDs and record the tracker's own ID as `tracker_id` in `stories.toml`. Keep it out of the agents' default permissions: syncing is an outward-facing action that a human triggers.

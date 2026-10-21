@@ -104,8 +104,8 @@ Only the residual points to carry into the Brief or to handle before intake. Say
 
 ## 8. Refinement Outcome
 
-<Keep exactly one line:>
-- Story ready for Brief intake
-- Story ready with residual open points to track
-- Story not ready and requires further refinement
+<Keep exactly one line; the code in backticks is parsed by tools/next_step.py and stays in English, the text follows the project language:>
+- `ready` Story ready for Brief intake
+- `ready-with-open-points` Story ready with residual open points to track
+- `not-ready` Story not ready and requires further refinement
 ```

@@ -449,7 +449,7 @@ What you should do:
 | Clarification after the Brief is frozen | add an Brief Addendum (§8) and update the Spec; never rewrite the original intent |
 | Production bug | hotfix flow: Brief (Hotfix) → RUN → Spec reconciliation (`delivery/guide/hotfix.md`) |
 | Refactor or NFR work | normal flow with the extra fields in `delivery/guide/refactor-nfr.md` |
-| Adopting an external tracker | rename IDs with `python3 tools/rename_id.py CP0101 4512`; add a tracker adapter (`tools/README.md`) |
+| Adopting an external tracker | keep the workflow IDs, record the tracker's ID as `tracker_id` in `backlog/stories.toml`; add a tracker adapter (`tools/README.md`) |
 
 ---
 

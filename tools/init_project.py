@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import tomllib
 
 sys.path.insert(0, os.path.dirname(__file__))
 import wf  # noqa: E402
@@ -33,12 +34,33 @@ def set_key(text: str, section: str, key: str, value) -> str:
     end_m = re.search(r"^\[", text[sec.end():], re.M)
     end = sec.end() + end_m.start() if end_m else len(text)
     body = text[sec.end():end]
-    rx = re.compile(rf"^({re.escape(key)}\s*=\s*)(\[[^\]\n]*\]|\"[^\"]*\"|\S+)(.*)$", re.M)
+    string = r'"(?:[^"\\\n]|\\.)*"'  # escape-aware: `"Acme \"Next\""` is one string
+    rx = re.compile(rf"^({re.escape(key)}\s*=\s*)(\[(?:{string}|[^\]\"\n])*\]|{string}|\S+)(.*)$", re.M)
     if rx.search(body):
         body = rx.sub(lambda m: m.group(1) + lit + m.group(3), body, count=1)
     else:
         body = f"\n{key} = {lit}" + body
     return text[:sec.end()] + body + text[end:]
+
+
+def validate(prefix: str, language: str, tools: list[str]) -> str | None:
+    """Error message for invalid project settings, or None (shared with tools/adopt.py, which checks before copying)."""
+    if not re.fullmatch(r"[A-Z]{2,3}", prefix):
+        return "--prefix must be 2-3 uppercase letters"
+    if not re.fullmatch(r"[a-z]{2}(-[A-Z]{2})?", language):
+        return "--language must be an ISO code like en, it, pt-BR"
+    if not tools or any(t not in TOOLS for t in tools):
+        return f"--tools: choose among {', '.join(TOOLS)}"
+    return None
+
+
+def write_toml(p: str, text: str) -> None:
+    """Write a TOML file only if it still parses: a broken project.toml would break every tool."""
+    try:
+        tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        sys.exit(f"{p}: the update would produce invalid TOML ({e}); nothing written")
+    wf.write(p, text)
 
 
 def main() -> None:
@@ -54,14 +76,9 @@ def main() -> None:
     ap.add_argument("--design", default=None, help="existing design or prototype: /mockup maps it instead of building one")
     a = ap.parse_args()
 
-    if not re.fullmatch(r"[A-Z]{2,3}", a.prefix):
-        sys.exit("--prefix must be 2-3 uppercase letters")
-    if not re.fullmatch(r"[a-z]{2}(-[A-Z]{2})?", a.language):
-        sys.exit("--language must be an ISO code like en, it, pt-BR")
     tools = [t.strip() for t in a.tools.split(",") if t.strip()]
-    bad = [t for t in tools if t not in TOOLS]
-    if bad or not tools:
-        sys.exit(f"--tools: choose among {', '.join(TOOLS)}")
+    if err := validate(a.prefix, a.language, tools):
+        sys.exit(err)
     srcs = [wf.rel(os.path.abspath(x)) if os.path.isabs(x) else os.path.normpath(x) for x in (a.sources or [])]
     design = (wf.rel(os.path.abspath(a.design)) if os.path.isabs(a.design) else os.path.normpath(a.design)) if a.design else None
     missing = [x for x in srcs + ([design] if design else []) if not wf.exists(x)]
@@ -78,12 +95,11 @@ def main() -> None:
         p = set_key(p, "inception", "sources", [x for x in srcs if x != design])
     if design is not None:
         p = set_key(p, "inception", "design", design)
-    wf.write("project.toml", p)
-
     m = wf.read("models.toml")
     for t in TOOLS:
         m = set_key(m, f"tools.{t}", "enabled", t in tools)
-    wf.write("models.toml", m)
+    write_toml("project.toml", p)
+    write_toml("models.toml", m)
 
     if old_prefix != a.prefix:
         for f in EXAMPLE_FILES:

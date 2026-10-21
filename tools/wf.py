@@ -8,6 +8,7 @@ import glob
 import json
 import os
 import re
+import sys
 import tomllib
 from functools import lru_cache
 
@@ -16,13 +17,20 @@ TIERS = ("fast", "balanced", "deep")
 SCHEMA = 1  # legacy flat --json of context.py (outside the contract)
 CONTRACT_VERSION = "1.0"  # semver of the --json envelope (tools/README.md "JSON contract"): minor adds fields, major breaks
 
+for _s in (sys.stdout, sys.stderr):  # the text views print → ≈ ⚠ ✓: a cp1252 console or pipe (Windows) must not crash
+    try:
+        _s.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 
 def path(*p: str) -> str:
     return os.path.join(ROOT, *p)
 
 
 def rel(p: str) -> str:
-    return os.path.relpath(p, ROOT)
+    """Path relative to the root, always with `/` (JSON contract and comparisons are OS-independent)."""
+    return os.path.relpath(p, ROOT).replace(os.sep, "/")
 
 
 def read(p: str) -> str:
@@ -77,10 +85,14 @@ def approx_tokens(chars: int) -> int:
 
 
 def load_toml(p: str) -> dict:
+    """Parsed TOML file ({} when absent); a malformed file raises ValueError naming the file."""
     if not exists(p):
         return {}
     with open(path(p), "rb") as f:
-        return tomllib.load(f)
+        try:
+            return tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            raise ValueError(f"{p}: {e}") from None
 
 
 @lru_cache(maxsize=None)
@@ -122,16 +134,58 @@ def id_rx() -> str:
     return rf"{re.escape(prefix())}\d{{4}}"
 
 
+def norm_id(x: str) -> str:
+    """A story ID as typed by a human or an agent (`pr-0101`, `PR0101`) in its canonical form `PR0101`."""
+    return x.replace("-", "").upper()
+
+
 def stories() -> dict[str, dict]:
-    return {s["id"]: s for s in backlog().get("story", [])}
+    out = {}
+    for n, s in enumerate(backlog().get("story", []), 1):
+        if not isinstance(s, dict) or not isinstance(s.get("id"), str):
+            raise ValueError(f"backlog/stories.toml: [[story]] #{n} has no id")
+        out[s["id"]] = s
+    return out
 
 
 # ---------------------------------------------------------------- markdown status
 
+FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def frontmatter(text: str) -> str:
+    """The YAML frontmatter block (between the leading `---` lines), or "" when the file has none."""
+    m = re.match(r"\A\ufeff?---[ \t]*\n(.*?)^---[ \t]*$", text, re.M | re.S)
+    return m.group(1) if m else ""
+
+
 def front(text: str, key: str) -> str | None:
-    """Value of `key:` in the YAML frontmatter (or anywhere at line start), without trailing comment."""
-    m = re.search(rf"^{key}:\s*([^#\n]+)", text, re.M)
-    return m.group(1).strip() if m else None
+    """Value of `key:` in the YAML frontmatter, without quotes and trailing comment; None when absent or empty."""
+    m = re.search(rf"^{re.escape(key)}:[ \t]*([^#\n]*)", frontmatter(text), re.M)
+    v = m.group(1).strip().strip("'\"").strip() if m else ""
+    return v or None
+
+
+def headings(text: str) -> list[tuple[int, int, str]]:
+    """(line number, level, line) of the Markdown headings, ignoring `#` lines inside fenced code blocks."""
+    out, fence = [], None
+    for n, line in enumerate(text.splitlines()):
+        if f := FENCE.match(line):
+            fence = None if fence == f.group(1) else fence or f.group(1)
+        elif not fence and (h := re.match(r"^(#{1,6})\s", line)):
+            out.append((n, len(h.group(1)), line))
+    return out
+
+
+def heading_section(text: str, start_rx: str) -> str | None:
+    """From the first heading matching start_rx to the next heading of the same or higher level (code fences aware)."""
+    lines = text.splitlines()
+    hs = headings(text)
+    for k, (n, level, line) in enumerate(hs):
+        if re.search(start_rx, line):
+            end = next((m for m, lv, _ in hs[k + 1:] if lv <= level), len(lines))
+            return "\n".join(lines[n:end]).strip()
+    return None
 
 
 def md_status(text: str) -> str | None:
@@ -248,9 +302,16 @@ CHAIN = {"story": "analysis/10-stories/STORY_{i}_*.md", "analysis": "analysis/20
          "spec": "delivery/20-specs/SPEC-{i}-*.md", "run": "delivery/30-runs/RUN-{i}*.md"}
 
 
+def find(kind: str, i: str) -> str | None:
+    """Absolute path of one chain artifact of a story; for the RUN, `RUN-<ID>.md` wins over `RUN-<ID>-<suffix>.md`."""
+    if kind == "run" and exists(f"delivery/30-runs/RUN-{i}.md"):
+        return path(f"delivery/30-runs/RUN-{i}.md")
+    return one(CHAIN[kind].format(i=i))
+
+
 def artifacts(i: str) -> dict:
     """Paths of the chain artifacts of a story (None when absent)."""
-    return {k: (rel(h) if (h := one(p.format(i=i))) else None) for k, p in CHAIN.items()}
+    return {k: (rel(h) if (h := find(k, i)) else None) for k in CHAIN}
 
 
 def section(text: str, start: str, end: str) -> str:
@@ -260,10 +321,13 @@ def section(text: str, start: str, end: str) -> str:
 
 
 def task_ids(text: str, i: str) -> set[str]:
-    """Task IDs named in a RUN §9 list, ranges included (`TSK-X-01 to TSK-X-08`, `–`, `..`)."""
+    """Task IDs named in a RUN §9 list, ranges included (`TSK-X-01 to TSK-X-08`, `–`, `—`, `..`, ` - `, `TSK-X-01 - 03`)."""
     tid = rf"TSK-{re.escape(i)}-(\d+)"
     ids = {f"TSK-{i}-{n}" for n in re.findall(tid, text)}
-    for a, b in re.findall(rf"{tid}\s*(?:to|–|—|\.\.)\s*{tid}", text):
+    for a, full, short in re.findall(rf"{tid}\s*(?:to|–|—|\.\.|-)\s*(?:{tid}|(\d+)\b)", text):
+        b = full or short
+        if short and len(short) != len(a):  # `TSK-X-03 — 2 files`: prose, not a range
+            continue
         ids |= {f"TSK-{i}-{n:0{len(a)}d}" for n in range(int(a), int(b) + 1)}
     return ids
 
@@ -315,7 +379,7 @@ def main(argv: list[str]) -> int:
     else:
         try:
             if cmd == "story":
-                i = args[1].replace("-", "")
+                i = norm_id(args[1])
                 if i not in stories():
                     if as_json:
                         fail_envelope("story", "unknown_id", f"Unknown ID: {i}")
