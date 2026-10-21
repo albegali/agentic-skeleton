@@ -88,6 +88,27 @@ def after_edit(tool: str, inp: dict, before: str) -> str | None:
     return text
 
 
+FORCE_DELETE = re.compile(r"^\s*git\s+branch\s+-D\s+([\w][\w./-]*)\s*$")
+
+
+def merged_by_content(branch: str) -> bool:
+    """True when merging `branch` into trunk changes nothing: its content is already in main (squash/rebase merge)."""
+    import subprocess
+
+    def git(*a: str) -> str | None:
+        try:
+            r = subprocess.run(["git", *a], cwd=wf.ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    if branch in ("main", "master") or git("rev-parse", "--verify", "-q", f"refs/heads/{branch}") is None:
+        return False
+    trunk = next((t for t in ("origin/main", "main") if git("rev-parse", "--verify", "-q", t) is not None), None)
+    merged = git("merge-tree", "--write-tree", trunk, branch) if trunk else None
+    return bool(merged) and merged.split()[0] == git("rev-parse", f"{trunk}^{{tree}}")
+
+
 def deny(reason: str) -> None:
     print(f"Blocked by the workflow guard (tools/gate_guard.py): {reason}", file=sys.stderr)
     sys.exit(2)
@@ -97,8 +118,11 @@ def check(event: dict) -> None:
     tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
     if tool == "Bash":
         cmd = inp.get("command", "")
+        force = FORCE_DELETE.match(cmd)
         for rx, why in SHELL_DENY:
             if re.search(rx, cmd):
+                if why == "no forced branch deletion" and force and merged_by_content(force.group(1)):
+                    continue  # squash-merged story branch: `git branch -d` refuses it, but nothing is lost
                 deny(f"{why}: `{cmd[:120]}`")
         return
     if tool not in ("Edit", "Write", "MultiEdit"):

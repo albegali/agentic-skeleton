@@ -31,8 +31,8 @@ CI red → RUN stays `Persisted`, report; the fix goes through `/run <ID> tuning
 ## `/close` — merge this story's PR only
 1. If `main` moved since `/persist`, update the branch from `origin/main` again. Commit the closure (RUN `Closed`, Brief closed) on the story branch and push it.
 2. `gh pr checks <pr> --required --watch`, then `gh pr merge <pr> --<method> --delete-branch` with `<method>` from `project.toml` `[git] merge` (default `squash`). Never `--admin`: a protection rule that blocks the merge is reported, not bypassed.
-3. `git switch main && git pull --ff-only`, delete the local story branch, then re-verify `main`: `make check` and `make test`.
-4. List the other open branches (`git branch -a --no-merged main`) and report them. **Never merge or delete a branch that is not this story's.**
+3. `git switch main && git pull --ff-only`, delete the local story branch (`git branch -d <b>`; after a squash merge it refuses, so use `git branch -D <b>`, which the guard allows only when the branch's content is already in `main`; any other forced deletion stays blocked), then re-verify `main`: `make check` and `make test`.
+4. List the other open branches (`git branch -a --no-merged main`) and report them; a remote branch left behind by a merge without "delete branch" is reported for the human to delete. **Never merge or delete a branch that is not this story's.**
 No remote: `git switch main && git merge --squash <branch> && git commit -m "<ID>: <title>"`, then step 3 without the pull.
 The merge commit is not written back into the RUN (`main` may be protected): the RUN's `PR` is the record (`gh pr view <PR> --json mergeCommit`; no remote: `git log --grep <ID> main`).
 

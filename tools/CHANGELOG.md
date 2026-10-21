@@ -3,6 +3,9 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.17.3
+- `/close` (#39): after a squash merge `git branch -D <story-branch>` is allowed by `gate_guard.py` when the branch's content is already in `main` (`git merge-tree` equals `main`'s tree); every other forced deletion stays blocked.
+
 ## 1.17.2
 - `check_workflow.py --git` (#37): a RUN already approved in the base branch is not checked against the current branch's commits, so a later branch (e.g. a skeleton upgrade) no longer fails with "code committed with the strategy approval" for every closed RUN.
 
