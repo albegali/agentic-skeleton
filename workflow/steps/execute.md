@@ -1,6 +1,8 @@
 # Step execute — execution (developer mode)
 
-**Command**: `/run <ID>` (resumes where it stopped) · **Tier**: balanced · **Session**: the strategy's session if under ~50% of the context; otherwise a fresh one with `/run <ID>`: the RUN is the memory
+**Command**: `/run <ID>` (resumes where it stopped) · **Tier**: balanced · **Session**: the strategy's session while it is under ~80k tokens (Claude Code: `/context`); past that, `/clear`, then `/run <ID>`: the RUN is the memory
+
+**Context (fresh session)**: `python3 tools/context.py execute {ID}` — the RUN, the Spec, its cited ADR/FR/NFR sections, the package `AGENTS.md` files; then only the code files of the current plan step.
 
 **Token rules**:
 - implement one plan step at a time;

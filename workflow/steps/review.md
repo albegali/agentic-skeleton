@@ -2,7 +2,7 @@
 
 **Command**: `/review-story <ID>` · **Tier**: balanced · **Session**: fresh
 
-**Context**: `python3 tools/context.py review {ID}` (runs `make check`), then the story's diff only: `git diff main...HEAD` on the story branch (or `gh pr diff <pr>`, PR URL in RUN §8) — not the whole code base.
+**Context**: `python3 tools/context.py review {ID}` — Brief, Spec, RUN, the ADR/FR/NFR sections the Spec cites, the package `AGENTS.md` files, `make check`, and the size of the story diff with its `--stat`. Then the diff only, never the whole code base: in one go when the budget says so, otherwise file by file (`git diff main...HEAD -- <path>`).
 
 **Prompt**
 ```

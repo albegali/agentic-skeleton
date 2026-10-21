@@ -12,6 +12,9 @@
 #   run_max   max lines printed per `run` command (default 80)
 #   sources   true: add the kickoff sources recorded in project.toml [inception] sources
 #   design    true: point to the existing design in project.toml [inception] design (outline, not the whole file)
+#   package_rules  true: list the package AGENTS.md files with their size (counted in the budget)
+#   diff      true: size and --stat of the story branch diff against main (file by file when large)
+# Files passed to a step (workshop minutes, sources): `tools/context.py <step> <IDs> --with <file>`.
 
 # ------------------------------------------------------------------ inception (product mode)
 
@@ -118,6 +121,7 @@ command = "refine"
 tier = "balanced"
 session = "fresh; stories of the same workshop together (max 4)"
 read = ["analysis/AGENT_GUIDE.md", "analysis/templates/REFINED-template.md", "analysis/10-stories/STORY_{ID}_*.md", "analysis/20-analysis/ANALYSIS_{ID}_*.md"]
+refs_from = ["analysis/20-analysis/ANALYSIS_{ID}_*.md"]
 
 # ------------------------------------------------------------------ delivery (developer mode)
 
@@ -142,7 +146,7 @@ session = "fresh; stays open for approval and execution"
 read = ["delivery/guide/quick.md", "delivery/templates/BRIEF-template.md", "delivery/templates/SPEC-template.md", "delivery/templates/RUN-template.md"]
 first = ["analysis/30-refined/REFINED_{ID}_*.md", "analysis/10-stories/STORY_{ID}_*.md"]
 refs_from = ["analysis/10-stories/STORY_{ID}_*.md"]
-run = ["python3 tools/context.py --package-rules"]
+package_rules = true
 
 [steps.spike]
 title = "Spike: time-boxed investigation, findings note and follow-up stories (no code merged)"
@@ -174,7 +178,7 @@ deep_when = "story size L/XL or new architecture"
 session = "fresh; stays open for approval and execution"
 read = ["delivery/20-specs/SPEC-{ID}-*.md", "delivery/templates/RUN-template.md", "delivery/guide/run.md"]
 refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
-run = ["python3 tools/context.py --package-rules"]
+package_rules = true
 
 [steps.run-approval]
 title = "Human approval of the RUN strategy"
@@ -187,8 +191,10 @@ owner = "agent"
 mode = "developer"
 command = "run"
 tier = "balanced"
-session = "same as the strategy if under ~50% context; otherwise fresh (the RUN is the memory)"
+session = "same as the strategy while the session is under ~80k tokens; otherwise /clear, then /run <ID> (the RUN is the memory)"
 read = ["delivery/30-runs/RUN-{ID}.md", "delivery/20-specs/SPEC-{ID}-*.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
 
 [steps.tuning]
 title = "Human verification, tuning within scope, persistence"
@@ -203,6 +209,9 @@ command = "review-story"
 tier = "balanced"
 session = "fresh (fresh eyes)"
 read = ["delivery/10-briefs/BRIEF-{ID}-*.md", "delivery/20-specs/SPEC-{ID}-*.md", "delivery/30-runs/RUN-{ID}.md"]
+refs_from = ["delivery/20-specs/SPEC-{ID}-*.md"]
+package_rules = true
+diff = true
 run = ["make check"]
 
 [steps.close]

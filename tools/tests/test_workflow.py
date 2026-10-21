@@ -290,6 +290,29 @@ class WorkflowTest(unittest.TestCase):
         warn = r.run("tools/context.py", "analysis").stdout
         self.assertIn("needs story IDs", warn)
 
+    def test_context_counts_what_the_step_really_reads(self):
+        r = self.r
+        r.through_inception()
+        r.run("tools/gen_backlog.py")
+        r.write("analysis/30-refined/REFINED_DM0101_walking_skeleton.md",
+                "---\nstatus: refined\nsource_files:\n  - reference/product/functional-requirements.md#FR-01\n---\n# R\nFR-01, ADR-001\n")
+        b = json.loads(r.run("tools/context.py", "brief-spec", "DM0101", "--json").stdout)
+        self.assertEqual(b["cited"], [])  # the FR file is cited by anchor and its section is already extracted
+        adr = next(s for s in b["sections"] if s["ref"] == "ADR-001")
+        self.assertGreater(adr["tokens"], 0)
+        self.assertGreaterEqual(b["tokens"], sum(x["tokens"] for x in b["read"] + b["sections"]))
+        r.write("pkg/api/AGENTS.md", "# api rules\n" + "rule\n" * 50)
+        r.write("delivery/20-specs/SPEC-DM0101-walking-skeleton.md", SPEC_MD.format(i="DM0101", st="Ready") + "FR-01\n")
+        ex = json.loads(r.run("tools/context.py", "execute", "DM0101", "--json").stdout)
+        self.assertEqual([x["path"] for x in ex["package_rules"]], ["pkg/api/AGENTS.md"])
+        self.assertIn("FR-01", [s["ref"] for s in ex["sections"]])
+        r.write("project-journal/notes/2026-10-01-workshop-x.md", "minutes\n")
+        rf = json.loads(r.run("tools/context.py", "refine", "DM0101", "--with", "project-journal/notes/2026-10-01-workshop-x.md", "--json").stdout)
+        self.assertIn("project-journal/notes/2026-10-01-workshop-x.md", [x["path"] for x in rf["read"]])
+        self.assertEqual(rf["ids"], ["DM0101"])
+        rv = json.loads(r.run("tools/context.py", "review", "DM0101", "--json").stdout)
+        self.assertIn("diff", rv)  # null outside a git repository with a main branch
+
     def test_context_lists_cited_files_and_architecture_sections(self):
         r = self.r
         r.through_inception()
