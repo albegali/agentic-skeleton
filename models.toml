@@ -16,11 +16,6 @@ fast = "gpt-5-mini"
 balanced = "gpt-5-codex"
 deep = "gpt-5"
 
-[vendors.google]             # verify
-fast = "gemini-2.5-flash"
-balanced = "gemini-2.5-pro"
-deep = "gemini-2.5-pro"
-
 # Tools to generate adapters for. `vendor` picks the column above; `models` overrides single tiers
 # with the exact name the tool expects (e.g. Copilot's model picker labels).
 
@@ -40,3 +35,4 @@ models = { fast = "Claude Haiku 5.5", balanced = "Claude Sonnet 5.5", deep = "Cl
 [tools.cursor]
 enabled = true
 vendor = "anthropic"
+models = { fast = "Claude Haiku 5.5", balanced = "Claude Sonnet 5.5", deep = "Claude Opus 5.5" }   # verify labels in the Cursor model picker

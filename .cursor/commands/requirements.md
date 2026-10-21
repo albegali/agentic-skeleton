@@ -5,6 +5,6 @@ Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from t
 
 Arguments: [source files: transcripts, documents…]
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/requirements.md`. Sources: <the text typed after the command>

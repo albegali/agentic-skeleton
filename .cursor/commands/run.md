@@ -5,7 +5,7 @@ Developer mode — RUN strategy, approval, execution, tuning (same session for t
 
 Arguments: <ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Arguments: <the text typed after the command>.
 

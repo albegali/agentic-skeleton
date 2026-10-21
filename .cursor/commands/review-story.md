@@ -5,6 +5,6 @@ Review mode — independent review of one story before closure; records the outc
 
 Arguments: <ID>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/review.md` with {ID} = <the text typed after the command>. Do not modify code: write only RUN §11 and the RUN status.

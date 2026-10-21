@@ -5,6 +5,6 @@ Inception — clickable mockup (or map of the existing design) and the screen �
 
 Arguments: [FR-xx… | screen names]  (empty = all UI requirements; an existing design in project.toml is mapped, not rebuilt)
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/mockup.md`. Scope: <the text typed after the command>

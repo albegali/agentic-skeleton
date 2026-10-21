@@ -5,7 +5,7 @@ Developer mode — update an existing Spec (e.g. after human review)
 
 Arguments: <ID> <requested changes>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Developer mode. Arguments: <the text typed after the command>. Update only `delivery/20-specs/SPEC-<ID>-*.md` as requested, following `delivery/templates/SPEC-template.md`.
 The requests are the arguments plus the human's open requests in Spec §10 Notes / Clarifications: apply them all and mark each handled request in §10 (`→ done <date>`, or `→ not applied: <reason>`).

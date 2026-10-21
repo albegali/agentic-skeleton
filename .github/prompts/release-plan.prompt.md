@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Inception — releases and sprints in PLAN.md, respecting dependencies"
 model: "Claude Sonnet 5.5"
 ---

@@ -5,6 +5,6 @@ Inception — stack proposal, ADRs, architecture, data model, Makefile targets
 
 Arguments: [constraints or preferred stack]
 
-> Recommended model: **opus** (tier `deep`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Opus 5.5** (tier `deep`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/architecture.md`. User constraints: <the text typed after the command>

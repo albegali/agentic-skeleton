@@ -5,6 +5,6 @@ Developer mode — spike: time-boxed investigation, findings note and follow-up 
 
 Arguments: <ID> [time-box]
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/spike.md` with arguments <the text typed after the command>: the ID is {ID}, the optional time-box overrides the story's.

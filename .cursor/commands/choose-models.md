@@ -5,7 +5,7 @@ Choose the model per tier for each vendor/tool, then regenerate the adapters
 
 Arguments: [vendor or tool]
 
-> Recommended model: **haiku** (tier `fast`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Haiku 5.5** (tier `fast`, see models.toml). Switch to it before running this command.
 
 Arguments: <the text typed after the command>
 1. Read `models.toml`. Show a compact table tier × enabled tool with the current model, and mark entries flagged "verify".

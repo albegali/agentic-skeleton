@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — quick track (bug, hotfix, chore, XS): Brief + Spec + RUN strategy, then one approval"
 model: "Claude Sonnet 5.5"
 ---

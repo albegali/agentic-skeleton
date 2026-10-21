@@ -5,6 +5,6 @@ Analyst mode — Analysis of one or more stories (max 4 related)
 
 Arguments: <ID…>
 
-> Recommended model: **sonnet** (tier `balanced`, see models.toml). Switch to it before running this command.
+> Recommended model: **Claude Sonnet 5.5** (tier `balanced`, see models.toml). Switch to it before running this command.
 
 Follow `workflow/steps/analysis.md` with {IDS} = <the text typed after the command>.

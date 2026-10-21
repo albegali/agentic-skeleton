@@ -1,5 +1,5 @@
 # Workflow targets (stdlib Python >= 3.11, no dependencies). Stack targets read project.toml [stack].
-.PHONY: help next context check backlog agents usage approve test-tools setup test lint run portal codex-prompts adopt
+.PHONY: help next context check backlog agents usage approve test-tools setup test lint run portal adopt
 
 PY ?= python3
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
@@ -39,9 +39,6 @@ run:             ## start the app locally and open it in the browser: project.to
 
 portal:          ## start the agentic portal for this repository (project.toml [portal] version); python tools/portal.py without make
 	@$(PY) tools/portal.py
-
-codex-prompts:   ## Codex CLI reads prompts from ~/.codex/prompts: link this project's prompts there
-	@mkdir -p $${CODEX_HOME:-$$HOME/.codex}/prompts; for f in .codex/prompts/*.md; do ln -sf "$$PWD/$$f" "$${CODEX_HOME:-$$HOME/.codex}/prompts/$$(basename $$f)"; done; echo "linked: /prompts:<name> in Codex (last linked project wins on name clashes)"
 
 adopt:           ## install the workflow into an existing repository: make adopt TARGET=../my-app [ARGS="--prefix MA"]
 	@if [ -z "$(TARGET)" ]; then echo "usage: make adopt TARGET=<path of the existing repository> [ARGS='--prefix MA --dry-run']"; exit 1; fi

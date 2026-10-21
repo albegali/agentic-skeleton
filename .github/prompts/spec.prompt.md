@@ -1,5 +1,5 @@
 ---
-mode: 'agent'
+agent: 'agent'
 description: "Developer mode — update an existing Spec (e.g. after human review)"
 model: "Claude Sonnet 5.5"
 ---
