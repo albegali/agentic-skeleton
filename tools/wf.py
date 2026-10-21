@@ -163,6 +163,50 @@ def skips_analysis(s: dict) -> bool:
     if "skip_analysis" in s:
         return s["skip_analysis"] is True
     return s.get("type") in NO_ANALYSIS_TYPES or track(s) == "quick"
+SECURITY_RX = re.compile(r"\b(auth\w*|login|password\w*|passwd|credential\w*|secret\w*|token\w*|api[ -]?keys?|oauth|sso|"
+                         r"session cookies?|encrypt\w*|permission\w*|role-based|rbac|personal data|pii|gdpr|privacy)\b", re.I)
+SECURITY_SECTIONS = ("security", "privacy")
+
+
+def security_nfrs() -> set[str]:
+    """NFR IDs filed under the Security or Privacy heading of the NFR file (FR-1 = FR-01 normalised to NFR-01)."""
+    p = "reference/product/non-functional-requirements.md"
+    if not exists(p):
+        return set()
+    out, cur = set(), ""
+    for _, level, line in headings(read(p)):
+        if level == 2:
+            cur = line.lstrip("#").strip().lower()
+        elif m := re.search(r"\bNFR-0*(\d+)\b", line):
+            if any(cur.startswith(s) for s in SECURITY_SECTIONS):
+                out.add(f"NFR-{int(m.group(1)):02d}")
+    return out
+
+
+def security_sensitive(i: str) -> str | None:
+    """Why story i needs the security review step, or None. `security = true|false` in stories.toml decides when set;
+    otherwise a cited Security/Privacy NFR or a security keyword in the Spec."""
+    s = stories().get(i, {})
+    if "security" in s:
+        return "stories.toml security = true" if s["security"] is True else None
+    spec = one(f"delivery/20-specs/SPEC-{i}-*.md")
+    text = read(spec) if spec else ""
+    cited = {f"NFR-{int(n):02d}" for n in re.findall(r"\bNFR-0*(\d+)\b", text + " ".join(s.get("nfr", [])))}
+    if hit := sorted(cited & security_nfrs()):
+        return f"cites {', '.join(hit)} (Security/Privacy)"
+    if m := SECURITY_RX.search(text):
+        return f"the Spec mentions '{m.group(0)}'"
+    return None
+
+
+def security_review(text: str) -> str | None:
+    """Outcome of the RUN §8 `### Security review` subsection: ok | changes-requested | None."""
+    sec = heading_section(text, r"^###\s+Security review\b") or ""
+    m = re.search(r"^\s*-\s*Outcome:([^\n]*)$", sec, re.M)
+    codes = [c for c in ("ok", "changes-requested") if m and re.search(rf"`?\b{c}\b`?", m.group(1).lower())]
+    return codes[0] if len(codes) == 1 else None
+
+
 POINTS = {"XS": 1, "S": 1, "M": 2, "L": 3, "XL": 5}  # default story points per size (PLAN.md `points:` overrides)
 
 
@@ -194,8 +238,9 @@ def backlog_errors() -> list[str]:
         for k in STORY_LINKS:
             if k in s and not (isinstance(s[k], str) and s[k]):
                 out.append(f"{who}: `{k}` must be a story ID")
-        if "skip_analysis" in s and not isinstance(s["skip_analysis"], bool):
-            out.append(f"{who}: `skip_analysis` must be true or false")
+        for flag in ("skip_analysis", "security"):
+            if flag in s and not isinstance(s[flag], bool):
+                out.append(f"{who}: `{flag}` must be true or false")
     for n, e in enumerate(backlog().get("epic", []), 1):
         if not isinstance(e, dict) or not isinstance(e.get("id"), str):
             out.append(f"[[epic]] #{n} has no id")

@@ -9,6 +9,6 @@ Arguments (<ID>): ${input:args}
 Developer mode, ID the arguments above (`delivery/AGENT_GUIDE.md` §5, step 7).
 1. Update the Spec (§11) and only the `reference/` docs touched by the story.
 2. RUN: §5 `Tuning accepted by` (the human who ran `/persist`, from `project.toml` owner unless they said otherwise) and `Date`; §7-10 (§8 as facts: AC n/n, `Tests:` command → result, out-of-scope changes, `CI:`); status `Persisted` (not `Closed`: review and `/close` follow). Spec §11 facts and status `Done`. Tasks split off into new stories (`split_from`) are listed under §9 Tasks deferred with the new ID.
-3. `make backlog` (Spec index), then `make check`.
+3. `make gates ID=the arguments above` (writes RUN §8 `### Gates`; a failing gate → stop, RUN stays `Tuning`), `make backlog` (Spec index), then `make check`.
 4. Git: the `/persist` part of `delivery/guide/git.md` — commit, push the story branch, open its PR (RUN References `Branch`, `PR`), wait for the required checks, record `CI:` in RUN §8 and push it. Merge nothing.
 Chat: outcome in 3 lines, then `/review-story <ID>` in a fresh session.

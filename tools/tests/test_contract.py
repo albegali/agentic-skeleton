@@ -135,7 +135,7 @@ class ContractTest(unittest.TestCase):
         r = Repo()
         self.addCleanup(__import__("shutil").rmtree, r.dir, True)
         r.through_inception()
-        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nrelease = "R1"'))
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nrelease = "R1"\nsecurity = false'))
         r.write("PLAN.md", r.read("PLAN.md") + "\n| Release | Content | Target | Exit criterion |\n|---|---|---|---|\n"
                 "| R1 | EP-01 | 2026-01-31 | Items exported |\n")
         r.write("project-journal/context/kickoff.md", "# Kickoff\nScope.\n")

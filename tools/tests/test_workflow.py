@@ -766,6 +766,7 @@ class EdgeCaseTest(unittest.TestCase):
     def test_review_then_close(self):
         r = self.r
         r.through_inception()
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nsecurity = false', 1))  # no security step
         i = "DM0101"
         r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
         r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
@@ -1100,6 +1101,80 @@ class GateTest(unittest.TestCase):
         s = json.loads(r.read(".claude/settings.json"))
         self.assertEqual(len(s["hooks"]["PreToolUse"]), 2)
         self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
+
+
+class SecurityTest(unittest.TestCase):
+    """Secret scan, the security review step and the quality gates."""
+
+    def setUp(self) -> None:
+        self.r = Repo()
+
+    def tearDown(self) -> None:
+        self.r.cleanup()
+
+    def test_secret_scan_finds_keys_in_code_and_artifacts(self):
+        r = self.r
+        aws = "AKIA" + "QWERTYUIOPASDFGH"  # built at runtime: the repository itself must scan clean
+        gh = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+        pw = "Zx9!qR7#" + "vL2@pW5k"
+        r.write("src/config.py", f'AWS = "{aws}"\npassword = "{pw}"\nexample_token = "changeme-please"\n')
+        r.write("delivery/30-runs/RUN-DM0101.md", f"# RUN\nused token {gh} to test\nkey {aws}  # secret-scan: ignore\n")
+        out = r.run("tools/secret_scan.py", "--json", "src/config.py", "delivery/30-runs/RUN-DM0101.md", ok=False)
+        self.assertEqual(out.returncode, 1)
+        found = {(f["file"], f["line"], f["rule"]) for f in json.loads(out.stdout)["findings"]}
+        self.assertEqual(found, {("src/config.py", 1, "AWS access key"), ("src/config.py", 2, "hard-coded password"),
+                                 ("delivery/30-runs/RUN-DM0101.md", 2, "GitHub token")})
+        self.assertNotIn(aws, out.stdout)  # values are masked
+        r.run("tools/secret_scan.py", "tools/wf.py")
+
+    def test_security_sensitive_story_gets_a_security_review_before_the_review(self):
+        r, i = self.r, "DM0101"
+        r.through_inception()
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done") + "Users log in with a password.\n")
+        run = RUN.format(i=i, st="Persisted", plan="build", ok="x")
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        n = r.next(i)
+        self.assertEqual((n["step"], n["owner"]), ("security", "agent"))
+        self.assertIn("cites NFR-01 (Security/Privacy)", n["why"])
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('nfr = ["NFR-01"]\n', "", 1))
+        self.assertIn("mentions 'password'", r.next(i)["why"])
+        sec = "### Security review\n- Date: 2026-10-21\n- Reviewer: security review agent\n- Outcome: `{}`\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + sec.format("ok"))
+        self.assertEqual(r.next(i)["step"], "review")
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Tuning", plan="build", ok="x") + sec.format("changes-requested"))
+        self.assertIn("security review requested changes", r.next(i)["why"])
+        r.write("backlog/stories.toml", STORIES.format(st="approved").replace('size = "M"', 'size = "M"\nsecurity = false', 1))
+        r.write(f"delivery/30-runs/RUN-{i}.md", run)
+        self.assertEqual(r.next(i)["step"], "review")  # opted out
+        self.assertIn("security-review", r.read(".claude/commands/security-review.md") + "security-review")
+
+    def test_make_gates_writes_facts_and_blocks_closing_on_a_failure(self):
+        r, i = self.r, "DM0101"
+        r.through_inception()
+        r.write("t_ok.py", "print('12 passed')\n")  # scripts, not `python -c "…%…"`: cmd.exe expands % and quotes differently
+        r.write("t_cov.py", "print('TOTAL 71' + chr(37))\n")
+        r.toml_set("project.toml", "stack", "test", f'"{sys.executable}" t_ok.py')
+        r.toml_set("project.toml", "gates", "coverage", f'"{sys.executable}" t_cov.py')
+        r.toml_set("project.toml", "gates", "coverage_min", 80)
+        r.toml_set("project.toml", "gates", "secrets", False)
+        r.write(f"delivery/10-briefs/BRIEF-{i}-walking-skeleton.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-walking-skeleton.md", SPEC_MD.format(i=i, st="Done"))
+        review = "# 11. Review\n### Review #1\n- Date: 2026-10-21\n- Reviewer: review agent\n- Outcome: `ok-to-close`\n"
+        run = RUN.format(i=i, st="Closed", plan="build", ok="x") + "# 8. Quality Gates Check\n- Tests: x\n- CI: green — https://x/pr/1\n"
+        r.write(f"delivery/30-runs/RUN-{i}.md", run + review)
+        out = r.run("tools/quality_gates.py", i, ok=False)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        t = r.read(f"delivery/30-runs/RUN-{i}.md")
+        self.assertIn("- coverage: ", t, out.stdout + out.stderr)
+        self.assertIn("→ fail (71% (min 80%))", t)
+        self.assertIn("→ pass (12 passed)", t)
+        self.assertIn(f'- Tests: "{sys.executable}" t_ok.py → pass', t)
+        self.assertIn(f"RUN-{i}: Closed with failing gates (§8 Gates): coverage", r.run("tools/check_workflow.py", ok=False).stdout)
+        r.toml_set("project.toml", "gates", "coverage_min", 70)
+        r.run("tools/quality_gates.py", i)
+        self.assertEqual(r.read(f"delivery/30-runs/RUN-{i}.md").count("### Gates"), 1)
+        self.assertNotIn("failing gates", r.run("tools/check_workflow.py").stdout)
 
 
 class LaunchTest(unittest.TestCase):
