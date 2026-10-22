@@ -129,7 +129,7 @@ class GatesTest(unittest.TestCase):
         self.assertIn("Approved-at: ", body)
         self.assertEqual(self.git("show", "--name-only", "--format=", "HEAD").split(), [SPEC])
         changed = [p for p in before if before[p] != self.snapshot().get(p)]
-        self.assertEqual([os.path.relpath(p, self.r.dir) for p in changed], [SPEC])
+        self.assertEqual([os.path.relpath(p, self.r.dir).replace(os.sep, "/") for p in changed], [SPEC])
 
     def test_approve_strategy_same_edit_as_make_approve(self) -> None:
         self.r.write(SPEC, SPEC_MD.format(i=I, st="Ready"))
