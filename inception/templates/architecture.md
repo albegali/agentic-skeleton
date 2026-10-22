@@ -36,3 +36,9 @@ last_updated: YYYY-MM-DD
 
 ## 9. Conventions for agents
 <Patterns to follow, where new code goes, what never to do.>
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

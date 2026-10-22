@@ -3,6 +3,12 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.18.0
+- Contract **1.1** (additive): `gates.py list --json` (every pending human gate, from the detection `next_step.py` uses, with `id` `<gate>:<artifact path>`, `field`, `current`, `proposed`, `since`, `age_days`), `gates.py approve <gate-id>` and `gates.py request-changes <gate-id> --comment …` (envelope tool `gates`, schema `schemas/gates.schema.json`; errors `unknown_gate`, `stale_gate`, `invalid_transition`, `no_owner`, `comment_required`, `usage`, `bad_input`). The approver is the `project.toml` owner. `approve` is the same edit and commit as `make approve` (shared code in `gates.py`); `request-changes` puts the gate's field back to its draft value and adds one line to the artifact's `## Gates` section (a `# Gates` comment block in TOML), without committing.
+- `gates.py` writes atomically and keeps CRLF line endings (also for `make approve`); `approve.py` commits through `gates.commit_paths`, which also stages a not yet tracked artifact. `gate_guard.py` blocks agents from `gates.py approve|request-changes`.
+- Templates that can receive a request-changes line get a `## Gates` section.
+- **Upgrade**: nothing to do by hand.
+
 ## 1.17.3
 - `/close` (#39): after a squash merge `git branch -D <story-branch>` is allowed by `gate_guard.py` when the branch's content is already in `main` (`git merge-tree` equals `main`'s tree); every other forced deletion stays blocked.
 

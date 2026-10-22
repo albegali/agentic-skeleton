@@ -34,6 +34,8 @@ AT = r"(?:^|[;&|(\n]|\$\()\s*(?:\w+=\S*\s+)*"  # command position: a mention ins
 ARGS = r"[^|;&\n]*"
 SHELL_DENY = [
     (AT + r"(?:make\s+approve\b|python3?\s+\S*tools/approve\.py\b)", "approvals are run by the human (`make approve …`), never by an agent"),
+    (AT + r"python3?\s+\S*tools/gates\.py\s+(?:approve|request-changes)\b",
+     "gate decisions (`gates.py approve|request-changes`) are the human's (or the portal acting for the owner), never an agent's"),
     (AT + r"git\s+push\b" + ARGS + r"\s(-f|--force|--force-with-lease|--force-if-includes|--delete|-d)\b", "no force push or remote branch deletion"),
     (AT + r"git\s+push\b" + ARGS + r"\s\+\S", "no forced refspec (+branch)"),
     (AT + r"git\s+push\b" + ARGS + r"\s:\S", "no remote branch deletion (:branch)"),

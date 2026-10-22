@@ -216,3 +216,9 @@ Summary:
 > Post-closure only: factual corrections (links, typos, recorded results), one line each with date and source.
 > A change in behaviour is a new story with `supersedes = "<ID>"` in `backlog/stories.toml`, never a revision.
 
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.
