@@ -28,7 +28,7 @@ main-context calls (input ×1, cache write ×1.25, cache read ×0.1, output ×5)
 Fixed prefix: per tool, the median first-call context of the period's sessions (Claude Code: the first main-context
 call's input + cache read + cache write; Codex: the first `token_count` call's input), against the repository's own
 always-loaded share (`wf.prefix_tokens()`: AGENTS.md, CLAUDE.md, command and agent descriptions). The rest is the tool's
-setup: system prompt, tool schemas, MCP servers, skills and plugins (docs/GUIDE.md § Trim your tool prefix).
+setup: system prompt, tool schemas, MCP servers, skills and plugins (docs/GUIDE.md § 9.1 Trim your tool prefix).
 """
 from __future__ import annotations
 
@@ -407,8 +407,8 @@ def render(rows: list[dict], sessions: list[dict], since: dt.date, until: dt.dat
         out += [f"Context cost share (main context, Claude Code; full reads > {read_limit()} lines): "
                 + " · ".join(f"{label} {share[k]:.1%}" for k, label in KINDS.items())]
     pre = prefix(sessions)
-    out += [f"Fixed prefix: first-call context median {_n(p['first_call_median'])} tokens ({t}, {p['sessions']} sessions), "
-            f"of which this repository ~{_n(pre['repo_tokens'])} ({_pct(p['repo_share'])}): see docs/GUIDE.md § Trim your tool prefix"
+    out += [f"Fixed prefix: first-call context median {_n(p['first_call_median'])} tokens ({t}, {p['sessions']} session{'s' * (p['sessions'] != 1)}), "
+            f"of which this repository ~{_n(pre['repo_tokens'])} ({_pct(p['repo_share'])}): see docs/GUIDE.md § 9.1 Trim your tool prefix"
             for t, p in pre["tools"].items()]
     costs = [s["cost"] for s in sessions if s["cost"] is not None]
     out += [f"Totals: {len(sessions)} sessions, {len(rows)} commands · {sum(r['prompts'] for r in rows)} prompts · "

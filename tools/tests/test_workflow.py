@@ -407,8 +407,8 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(pre["tools"]["codex"]["first_call_median"], 20_000)
         out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
         self.assertIn(f"Fixed prefix: first-call context median 50.0k tokens (claude-code, 3 sessions), of which this repository ~{repo / 1e3:.1f}k "
-                      f"({repo / 50_000:.0%}): see docs/GUIDE.md § Trim your tool prefix", out)
-        self.assertIn("median 20.0k tokens (codex, 1 sessions)", out)
+                      f"({repo / 50_000:.0%}): see docs/GUIDE.md § 9.1 Trim your tool prefix", out)
+        self.assertIn("median 20.0k tokens (codex, 1 session)", out)
 
     def test_check_detects_errors(self):
         r = self.r
