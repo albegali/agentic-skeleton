@@ -10,7 +10,9 @@
 ---
 
 ## Status
-Draft
+Accepted
+
+Revision 2026-11-02: accepted by the owner in chat (`project-journal/decisions/2026-11-02-spike-43-offload-worker.md`).
 
 ---
 
