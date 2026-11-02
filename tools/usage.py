@@ -24,6 +24,11 @@ than `project.toml [context] max_read_lines` (Read without offset/limit, or cat/
 reads, targeted reads (offset/limit), `context.py` output, other Bash output, subagent results, other. The fixed prefix is
 the session's first-call context re-read (×0.1) on every call; output is ×5. Shares are of the weighted cost of all
 main-context calls (input ×1, cache write ×1.25, cache read ×0.1, output ×5).
+
+Fixed prefix: per tool, the median first-call context of the period's sessions (Claude Code: the first main-context
+call's input + cache read + cache write; Codex: the first `token_count` call's input), against the repository's own
+always-loaded share (`wf.prefix_tokens()`: AGENTS.md, CLAUDE.md, command and agent descriptions). The rest is the tool's
+setup: system prompt, tool schemas, MCP servers, skills and plugins (docs/GUIDE.md § 9.1 Trim your tool prefix).
 """
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ import glob
 import json
 import os
 import re
+import statistics
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -70,7 +76,7 @@ def _segment(step: str | None = None) -> dict:
 
 
 def _session(tool: str, sid: str) -> dict:
-    return {"tool": tool, "id": sid, "segments": [_segment()], "cost": None, "lines": None, "cost_models": {}}
+    return {"tool": tool, "id": sid, "segments": [_segment()], "cost": None, "lines": None, "cost_models": {}, "first": None}
 
 
 def _seen(s: dict, t: dt.datetime | None) -> None:
@@ -224,6 +230,8 @@ def claude_sessions() -> list[dict]:
                 if cmd or any(t and not t.startswith("<") for t in texts):
                     seg["prompts"] += 1
                     _seen(seg, _ts(d.get("timestamp")))
+    for sid, s in sessions.items():
+        s["first"] = states[sid]["prefix"] or None
     return list(sessions.values())
 
 
@@ -259,6 +267,7 @@ def codex_sessions() -> list[dict]:
                     cached = now["cached"] - total["cached"]
                     _add(seg, model, input=now["input"] - total["input"] - cached, output=now["output"] - total["output"], cache_read=cached)
                     seg["peak"] = last.get("input_tokens", 0) if last else seg["peak"]
+                    s["first"] = s["first"] or last.get("input_tokens") or None
                     total = now
                 elif kind == "event_msg" and p.get("type") == "user_message":
                     m = CODEX_COMMAND_RX.match((p.get("message") or "").strip())
@@ -348,6 +357,17 @@ def cost_share(rows: list[dict]) -> dict[str, float] | None:
     return {k: sum(r["context_cost"][k] for r in rows) / total for k in KINDS} if total else None
 
 
+def prefix(sessions: list[dict]) -> dict:
+    """Median first-call context per tool and the repository's always-loaded share of it."""
+    repo, tools = sum(wf.prefix_tokens().values()), {}
+    for t in sorted({s["tool"] for s in sessions}):
+        firsts = [s["first"] for s in sessions if s["tool"] == t and s["first"]]
+        if firsts:
+            med = statistics.median(firsts)
+            tools[t] = {"sessions": len(firsts), "first_call_median": med, "repo_share": repo / med}
+    return {"repo_tokens": repo, "tools": tools}
+
+
 def _n(v: int) -> str:
     return f"{v / 1e6:.2f}M" if v >= 1e6 else f"{v / 1e3:.1f}k" if v >= 1e3 else str(v)
 
@@ -386,6 +406,10 @@ def render(rows: list[dict], sessions: list[dict], since: dt.date, until: dt.dat
     if share:
         out += [f"Context cost share (main context, Claude Code; full reads > {read_limit()} lines): "
                 + " · ".join(f"{label} {share[k]:.1%}" for k, label in KINDS.items())]
+    pre = prefix(sessions)
+    out += [f"Fixed prefix: first-call context median {_n(p['first_call_median'])} tokens ({t}, {p['sessions']} session{'s' * (p['sessions'] != 1)}), "
+            f"of which this repository ~{_n(pre['repo_tokens'])} ({_pct(p['repo_share'])}): see docs/GUIDE.md § 9.1 Trim your tool prefix"
+            for t, p in pre["tools"].items()]
     costs = [s["cost"] for s in sessions if s["cost"] is not None]
     out += [f"Totals: {len(sessions)} sessions, {len(rows)} commands · {sum(r['prompts'] for r in rows)} prompts · "
             f"{sum(r['interrupts'] for r in rows)} interrupts · {sum(r['rejected'] for r in rows)} rejected tool calls · {sum(r['large_reads'] for r in rows)} large reads blocked · "
@@ -406,7 +430,7 @@ def main() -> None:
     if a.json:
         models = per_model(rows, sessions)
         print(json.dumps({"rows": [{**r, "start": r["start"].isoformat(), "end": r["end"].isoformat() if r["end"] else None} for r in rows],
-                          "models": models, "tiers": per_tier(models), "cost_share": cost_share(rows)}, indent=2))
+                          "models": models, "tiers": per_tier(models), "cost_share": cost_share(rows), "prefix": prefix(sessions)}, indent=2))
     else:
         print(render(rows, sessions, since, a.until))
 

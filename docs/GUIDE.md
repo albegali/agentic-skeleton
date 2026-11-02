@@ -447,12 +447,78 @@ What the skeleton already does for you:
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.
 2. If a session gets past about 80k tokens (Claude Code: `/context`), `/clear` and resume with the step's command (`/run <ID>` during execution): the RUN is the memory.
-   Every session also carries a fixed baseline before the step reads anything: the tool's system prompt, the tool schemas of each enabled MCP server, and the skill list. It can be tens of thousands of tokens. Disable the MCP servers and plugins this repository does not use (Claude Code: `/mcp`, or `enabledMcpjsonServers` / `disabledMcpjsonServers` in `.claude/settings.json`); `context.py` estimates only what the step adds.
+   Every session also carries a fixed baseline before the step reads anything: the tool's system prompt, the tool schemas of each enabled MCP server, and the skill list. It can be tens of thousands of tokens. Disable the MCP servers, skills and plugins this repository does not use ([9.1](#91-trim-your-tool-prefix)); `context.py` estimates only what the step adds.
 3. Keep stories small (S/M). Split XL stories in `/backlog`.
 4. Don't paste long logs or whole files into the chat: point to the path.
 5. Batch related stories in `/analysis` (at most 4) and `/refine` (same workshop).
 6. Don't ask for the deep tier by default; use it when a story is genuinely hard.
 7. Keep `reference/project-summary.md` under 60 lines: every step reads it.
+
+### 9.1 Trim your tool prefix
+
+Every call re-sends a fixed prefix: the tool's system prompt and built-in tool schemas, the MCP servers, skills and
+plugins enabled for the session, and this repository's instructions. `/weekly` (`tools/usage.py`) prints it per tool:
+
+`Fixed prefix: first-call context median 49.5k tokens (claude-code, 13 sessions), of which this repository ~2.4k (5%)`
+
+- **first-call context**: the median, over the period's sessions, of the first main-context call (input + cache read +
+  cache write; subagents excluded), before the step has read anything. Claude Code and Codex only (Copilot and Cursor
+  keep no readable logs).
+- **this repository**: what `make check` budgets as the prefix (`AGENTS.md`, `CLAUDE.md`, command and agent
+  descriptions), measured as Claude Code loads it. Everything else is your tool setup. It is re-read on every call
+  (cached, but on the skeleton's own sessions still ~20% of cost: "fixed prefix" in the context cost share line).
+
+The skeleton never switches off your servers or skills: these are your choices. Prefer personal, uncommitted files;
+a committed project file changes the setup of everyone on the team. Checked against the vendors' docs on 2026-11-02.
+
+**Claude Code**
+- See it: `/context` shows the current context usage ([commands](https://code.claude.com/docs/en/commands)).
+- MCP servers: toggle a server off for this project in `/mcp`; the choice is kept per project in `~/.claude.json`
+  ([MCP](https://code.claude.com/docs/en/mcp)). Or list it in `deniedMcpServers` (`{"serverName": "<name>"}`) in
+  `.claude/settings.local.json`: the denylist applies to servers from every scope and merges from every settings file,
+  so in the committed `.claude/settings.json` it blocks the server for the whole team
+  ([MCP access](https://code.claude.com/docs/en/managed-mcp)). `disabledMcpjsonServers` only rejects servers of the
+  project's `.mcp.json`.
+- MCP tool search is on by default: only tool names and server instructions load at session start. Keep it on (do not set
+  `ENABLE_TOOL_SEARCH=false`, and set `alwaysLoad` only on servers you use in most sessions)
+  ([MCP](https://code.claude.com/docs/en/mcp)).
+- One lean session: `claude --strict-mcp-config --mcp-config <file>` uses only the servers in that file
+  ([CLI](https://code.claude.com/docs/en/cli-reference)).
+- Skills and plugins: `skillOverrides` in `.claude/settings.local.json`, `"name-only"` (name without description) or
+  `"off"` (hidden from Claude); the `/skills` menu writes it ([skills](https://code.claude.com/docs/en/skills)).
+  `enabledPlugins` turns plugins on or off per scope; `disableBundledSkills` turns off the bundled skills
+  ([settings](https://code.claude.com/docs/en/settings-reference)).
+- Built-in tools: a bare deny rule (`"permissions": {"deny": ["WebSearch"]}`) removes the tool from Claude's context; a
+  scoped rule such as `Bash(rm *)` only blocks matching calls ([permissions](https://code.claude.com/docs/en/permissions)).
+  Never deny the tools the workflow uses (`Read`, `Edit`, `Write`, `Bash`, `Grep`, `Glob`, `Agent`).
+
+**Codex CLI**
+- See it: `/status` shows the session configuration and token usage
+  ([slash commands](https://learn.chatgpt.com/docs/cli/slash-commands)).
+- MCP servers: `enabled = false` under `[mcp_servers.<name>]` disables a server without deleting it; `enabled_tools` /
+  `disabled_tools` limit its tools. Servers live in `~/.codex/config.toml` or, in trusted projects, `.codex/config.toml`
+  ([MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)). For one lean session, `codex --profile <name>` overlays
+  `~/.codex/<name>.config.toml` on the user config ([advanced config](https://learn.chatgpt.com/docs/config-file/config-advanced)).
+  Whether a project file can switch off a server defined only in the user file: not documented.
+- Skills: a `[[skills.config]]` entry with `path` and `enabled = false` in `~/.codex/config.toml` disables a skill; the
+  skill list is capped at 2% of the context window by default ([skills](https://learn.chatgpt.com/docs/build-skills.md)).
+  Project-level skill switches: not documented.
+- Built-in tools: not documented.
+
+**GitHub Copilot (VS Code agent mode)**
+- MCP servers live in the workspace `.vscode/mcp.json` or in the user profile
+  ([MCP configuration](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)); a server can be disabled
+  globally, per workspace or per session, depending on the server ([manage MCP servers](https://code.visualstudio.com/docs/agents/run/manage-mcp-servers)).
+- Tools: deselect tools or whole MCP servers in the tools picker (*Configure Tools*); a request carries at most 128 tools
+  ([agent tools](https://code.visualstudio.com/docs/copilot/agents/agent-tools)). Whether deselected tools leave the
+  request, and a way to see the prefix: not documented.
+
+**Cursor**
+- MCP servers live in `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (all projects); a server disabled in the
+  settings does not load or appear in chat ([MCP](https://cursor.com/docs/context/mcp)).
+- Rules: only "Always Apply" rules go into every chat ([rules](https://cursor.com/docs/context/rules)); skills with
+  `disable-model-invocation: true` are included only when invoked ([skills](https://cursor.com/docs/context/skills)).
+- Built-in tools, and a way to see the prefix: not documented.
 
 ---
 
