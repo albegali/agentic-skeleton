@@ -15,6 +15,7 @@
 
 ## Status
 Draft → Strategy Approved → Executing → Tuning → Persisted → Reviewed → Closed  ·  Stopped / Blocked / Cancelled
+(the §2 approval sets `Strategy Approved`, never `Approved`: any other value fails `make check`)
 
 > A RUN MUST NOT be Closed before Persisted and Reviewed (§11).
 > Stopped: the human stopped it at §2 (resume with `/run <ID> revise: …`). Blocked: a §6 deviation awaits approval

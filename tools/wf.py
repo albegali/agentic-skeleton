@@ -5,6 +5,7 @@ The repository root is the parent of tools/, or $WF_ROOT when set (used by the t
 from __future__ import annotations
 
 import datetime as dt
+import fnmatch
 import glob
 import json
 import os
@@ -27,6 +28,38 @@ for _s in (sys.stdout, sys.stderr):  # the text views print → ≈ ⚠ ✓: a c
 
 def path(*p: str) -> str:
     return os.path.join(ROOT, *p)
+
+
+# skeleton files installed in the target (path segments matched one by one)
+INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/workflow.toml", "workflow/steps/*.md",
+           "inception/templates/*", "analysis/AGENTS.md", "analysis/AGENT_GUIDE.md", "analysis/templates/*", "analysis/*/.gitkeep",
+           "delivery/AGENTS.md", "delivery/AGENT_GUIDE.md", "delivery/guide/*", "delivery/templates/*", "delivery/*/.gitkeep",
+           "delivery/20-specs/README.md", "reference/README.md", "reference/*/.gitkeep", "reference/*/*/.gitkeep",
+           "project-journal/*.md", "project-journal/*/README.md", "project-journal/templates/*", "project-journal/*/.gitkeep",
+           "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json",
+           "tools/CHANGELOG.md", "tools/migrations/*.py"]
+NOT_INSTALLED = {"tools/adopt.py", "tools/upgrade.py"}  # the installer and the upgrader stay in the skeleton
+# upgraded where the project has them (a project created from the template), never added (an adopted repository)
+# (adopt.py / upgrade.py too: a template clone carries them, and its tool tests exercise them)
+UPGRADE_IF_PRESENT = ["tools/tests/*.py", ".github/workflows/workflow-check.yml", "tools/adopt.py", "tools/upgrade.py"]
+MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json", ".codex/config.toml"}  # .codex/config.toml: kept as is
+
+
+def seg_match(p: str, pat: str) -> bool:
+    a, b = p.split("/"), pat.split("/")
+    return len(a) == len(b) and all(fnmatch.fnmatch(x, y) for x, y in zip(a, b))
+
+
+def skeleton_paths() -> list[str]:
+    """Patterns of the files a skeleton sync (`make sync-skeleton`) writes: what adopt.py installs or upgrades, the files it
+    renders, the workflow targets and the regenerated Spec index."""
+    gen = read(os.path.join(ROOT, "workflow/.generated")).split() if os.path.exists(os.path.join(ROOT, "workflow/.generated")) else []
+    return [*INSTALL, *UPGRADE_IF_PRESENT, *MERGED_BY_RENDER, *gen, "workflow.mk", "Makefile", ".gitignore", "workflow/.generated"]
+
+
+def is_skeleton_path(path: str) -> bool:
+    return any(seg_match(path, p) for p in skeleton_paths())
+
 
 
 def rel(p: str) -> str:

@@ -10,7 +10,7 @@
 - never paste full test output in chat: outcome and failures only;
 - after each plan step, one RUN §3 line: `- TSK-<ID>-NN: done · files: … · tests: … · next: …` (the checkpoint); §3-4 append-only and terse.
 
-**Status** (RUN `## Status`):
+**Status** (RUN `## Status`; only the values of `wf.STATUSES["run"]`: the approval sets `Strategy Approved`, never `Approved`):
 - before the first code or test change: `Executing`, fill `Started at`;
 - every plan step done and §4 filled (pass or fail): `Tuning`, then stop: the human verifies;
 - stop condition (`delivery/AGENT_GUIDE.md` §9) or a deviation with `Scope impact: Requires approval`: add a `### Deviation #n` entry to §6 (what, why, plan impact), set `Blocked`, stop and print `/run {ID} approve-deviation <n>`.

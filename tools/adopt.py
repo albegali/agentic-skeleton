@@ -20,7 +20,6 @@ Then it runs the target's tools/init_project.py, and `make next` there recommend
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import os
 import re
 import shutil
@@ -29,32 +28,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import repo_map  # noqa: E402
+import wf  # noqa: E402
+from wf import INSTALL, MERGED_BY_RENDER, NOT_INSTALLED, UPGRADE_IF_PRESENT, seg_match  # noqa: E402,F401
 from init_project import TOOLS, set_key, validate  # noqa: E402
 from render_agents import BEGIN, END  # noqa: E402
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-# skeleton files installed in the target (path segments matched one by one)
-INSTALL = ["tools/*.py", "tools/README.md", "workflow/README.md", "workflow/workflow.toml", "workflow/steps/*.md",
-           "inception/templates/*", "analysis/AGENTS.md", "analysis/AGENT_GUIDE.md", "analysis/templates/*", "analysis/*/.gitkeep",
-           "delivery/AGENTS.md", "delivery/AGENT_GUIDE.md", "delivery/guide/*", "delivery/templates/*", "delivery/*/.gitkeep",
-           "delivery/20-specs/README.md", "reference/README.md", "reference/*/.gitkeep", "reference/*/*/.gitkeep",
-           "project-journal/*.md", "project-journal/*/README.md", "project-journal/templates/*", "project-journal/*/.gitkeep",
-           "project-journal/notes/current-week.md", "models.toml", "project.toml", ".vscode/tasks.json", "tools/VERSION", "schemas/*.json",
-           "tools/CHANGELOG.md", "tools/migrations/*.py"]
-NOT_INSTALLED = {"tools/adopt.py", "tools/upgrade.py"}  # the installer and the upgrader stay in the skeleton
-# upgraded where the project has them (a project created from the template), never added (an adopted repository)
-# (adopt.py / upgrade.py too: a template clone carries them, and its tool tests exercise them)
-UPGRADE_IF_PRESENT = ["tools/tests/*.py", ".github/workflows/workflow-check.yml", "tools/adopt.py", "tools/upgrade.py"]
 OPTIONAL = re.compile(r"(^|/)(README\.md|\.gitkeep|tasks\.json)$")  # on conflict: keep the target's file, skip ours
-MERGED_BY_RENDER = {"CLAUDE.md", ".github/copilot-instructions.md", ".claude/settings.json", ".codex/config.toml"}  # .codex/config.toml: kept as is
 DROP_TARGETS = {"adopt", "test-tools"}  # the tools tests copy the whole repository: not for an application repo
 STACK_TARGETS = {"help", "setup", "test", "lint", "run"}  # if the target defines them, its own version wins
 GITIGNORE = ["__pycache__/", "*.pyc", ".portal/"]  # .portal/: portal bundle cache and run state (make portal)
-
-
-def seg_match(p: str, pat: str) -> bool:
-    a, b = p.split("/"), pat.split("/")
-    return len(a) == len(b) and all(fnmatch.fnmatch(x, y) for x, y in zip(a, b))
 
 
 def skeleton_files(patterns: list[str] = INSTALL, skip: set[str] = NOT_INSTALLED) -> list[str]:
