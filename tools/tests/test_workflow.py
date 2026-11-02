@@ -318,6 +318,41 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("deep 25% of calls, 67% of cost", out)
         self.assertIn("No sessions", r.run("tools/usage.py", "--since", "2026-11-01", "--until", "2026-11-07").stdout)
 
+    def test_usage_cost_share_by_tool_result_kind(self):
+        r = self.r
+        home = os.path.join(r.dir, ".home")
+        r.env.update(CLAUDE_CONFIG_DIR=os.path.join(home, "claude"), CODEX_HOME=os.path.join(home, "codex"))
+        slug = "".join(c if c.isalnum() else "-" for c in os.path.abspath(r.dir))
+        call = lambda i, content=(), side=False, **u: {"type": "assistant", "sessionId": "s1", "timestamp": "2026-10-14T09:00:%02dZ" % i, "requestId": f"q{i}",
+                                                       "isSidechain": side, "message": {"id": f"m{i}", "model": "claude-sonnet-5-5", "content": list(content),
+                                                       "usage": {"input_tokens": 0, "output_tokens": 100, **u}}}
+        use = lambda tid, name, **inp: {"type": "tool_use", "id": tid, "name": name, "input": inp}
+        user = lambda content, i=0: {"type": "user", "sessionId": "s1", "userType": "external", "timestamp": "2026-10-14T09:00:%02dZ" % i,
+                                     "message": {"role": "user", "content": content}}
+        text = lambda n: "\n".join(["x" * 34] * n)
+        big, small, ctx = text(900), text(50), text(200)
+        claude = [user("<command-name>/brief</command-name>"),
+                  call(1, [use("t1", "Read", file_path="big.md")], cache_creation_input_tokens=10_000),  # one API call logged per content block
+                  call(1, [use("t2", "Bash", command="cd docs && cat small.md")], cache_creation_input_tokens=10_000),
+                  call(1, [use("t3", "Bash", command="python3 tools/context.py brief DM0101")], cache_creation_input_tokens=10_000),
+                  user([{"type": "tool_result", "tool_use_id": t, "content": c} for t, c in (("t1", big), ("t2", small), ("t3", ctx))], 2),
+                  call(3, cache_read_input_tokens=10_000, cache_creation_input_tokens=11_500),
+                  call(4, side=True, cache_read_input_tokens=500_000),  # subagent: not main context
+                  call(5, cache_read_input_tokens=21_500),
+                  user("<command-name>/clear</command-name>", 6), call(7, cache_read_input_tokens=10_000)]
+        r.write(f".home/claude/projects/{slug}/s1.jsonl", "\n".join(map(json.dumps, claude)) + "\n")
+        share = json.loads(r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19", "--json").stdout)["cost_share"]
+        total = 1.25 * 10_000 + 0.1 * 10_000 + 1.25 * 11_500 + 0.1 * 21_500 + 0.1 * 10_000 + 4 * 5 * 100
+        charged = lambda t: (1.25 + 0.1) * len(t) / 3.5  # written once, read once, dropped by /clear
+        for kind, expected in (("large_reads", charged(big)), ("small_reads", charged(small)), ("context_py", charged(ctx)),
+                               ("prefix", 4 * 0.1 * 10_000), ("output", 4 * 5 * 100), ("bash_other", 0), ("subagents", 0)):
+            self.assertAlmostEqual(share[kind], expected / total, places=6, msg=kind)
+        self.assertGreater(share["large_reads"], share["prefix"])
+        self.assertGreater(share["context_py"], share["small_reads"])
+        r.toml_set("project.toml", "context", "max_read_lines", 1000)
+        out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
+        self.assertIn("full reads > 1000 lines): full reads 0.0% · small reads 38.8%", out)  # 900 lines: now a small read
+
     def test_check_detects_errors(self):
         r = self.r
         r.through_inception()
