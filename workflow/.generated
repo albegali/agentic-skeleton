@@ -23,6 +23,7 @@
 .claude/agents/analyst.md
 .claude/agents/developer.md
 .claude/agents/journal.md
+.claude/agents/reader.md
 .claude/agents/reviewer.md
 .claude/commands/analysis.md
 .claude/commands/architecture.md
@@ -96,6 +97,7 @@
 .github/agents/analyst.agent.md
 .github/agents/developer.agent.md
 .github/agents/journal.agent.md
+.github/agents/reader.agent.md
 .github/agents/reviewer.agent.md
 .github/copilot-instructions.md
 .github/prompts/analysis.prompt.md

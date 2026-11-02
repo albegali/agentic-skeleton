@@ -154,6 +154,7 @@ def full_read_target(cmd: str) -> str | None:
 def deny_large(path: str, lines: int) -> None:
     deny(f"large read: {path} has {lines} lines. Do not read it whole: `python3 tools/context.py --index {path}` for its headings, "
          f"a cited section extract, or a targeted read with offset and limit (Read) / `sed -n 'A,Bp'`. "
+         f"For a question that spans many files, ask the `reader` subagent (Claude Code, fast tier) instead. "
          f"The threshold is `[context] max_read_lines` in project.toml")
 
 

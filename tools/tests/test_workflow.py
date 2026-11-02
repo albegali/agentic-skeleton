@@ -389,6 +389,10 @@ class WorkflowTest(unittest.TestCase):
         self.assertNotIn("mode:", prompt)
         self.assertEqual(prompt.count("Arguments"), 1)
         self.assertIn("model: ", r.read(".github/agents/reviewer.agent.md"))
+        reader = r.read(".claude/agents/reader.md")  # read-only bulk reader on the fast tier
+        self.assertIn(f"model: {tier('claude-code', 'fast')}\ntools: Read, Grep, Glob\n", reader)
+        self.assertIn('"unsure"', reader)
+        self.assertIn("`reader` subagent", r.read("CLAUDE.md"))
         self.assertIn(tier("cursor", "balanced"), r.read(".cursor/commands/brief.md"))
         n = r.next()
         self.assertEqual((n["commands"]["claude-code"], n["commands"]["codex"]), ("/kickoff", "$kickoff"))
@@ -1105,6 +1109,7 @@ class GateTest(unittest.TestCase):
         self.assertEqual(blocked.returncode, 2)
         self.assertIn("large read: ", blocked.stderr)
         self.assertIn("tools/context.py --index", blocked.stderr)
+        self.assertIn("`reader` subagent", blocked.stderr)
         self.assertEqual(self.guard("Read", {"file_path": big, "offset": 10, "limit": 50}).returncode, 0)
         self.assertEqual(self.guard("Read", {"file_path": os.path.join(r.dir, "small.md")}).returncode, 0)
         self.assertEqual(self.guard("Read", {"file_path": os.path.join(r.dir, "nothing.md")}).returncode, 0)

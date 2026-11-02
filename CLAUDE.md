@@ -6,4 +6,4 @@
 Claude Code specifics:
 - Start with `/next`; between steps use `/clear` (except the `/run` chain of the same story).
 - Each command pins its model in the frontmatter (tier → model in `models.toml`) for its own turn; the session default in `.claude/settings.json` is the balanced tier. Answer gates with the command (`/run <ID> approve`, `/run <ID> tuning: …`), not free text, so the pinned model runs them. L/XL stories use `/run-deep`. Do not switch to a larger model unless the user asks.
-- Subagents in `.claude/agents/` only for independent workstreams.
+- Subagents in `.claude/agents/` only for independent workstreams; exception: the `reader` subagent (fast tier, read-only) for questions that span many files (AGENTS.md §5).

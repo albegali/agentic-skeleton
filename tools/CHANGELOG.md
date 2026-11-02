@@ -3,6 +3,11 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.21.0
+- `reader` subagent (#46, from spike #43): read-only (`Read`, `Grep`, `Glob`, no Bash) on the `fast` tier, rendered from `workflow.toml [agents.reader]` to `.claude/agents/reader.md` (and `.github/agents/reader.agent.md` for Copilot, where the renderer sets no tool list, so read-only is enforced in Claude Code only; Codex and Cursor have no subagents). It answers questions that span many files with bullets that lead with the exact name and `file:line`, no preamble or summary, "unsure" instead of guessing, no count without the items; the caller verifies the lines before editing. AGENTS.md §5 says when to use it (`/onboard`, `/analysis` of existing code, cross-file questions) and when not (editing, debugging, architecture, review judgments); CLAUDE.md names it as the exception to "no subagents".
+- `gate_guard.py`: the large-read block message also points to the `reader` subagent.
+- **Upgrade**: `make sync-skeleton` (or `make agents` after taking `workflow/workflow.toml`) renders the new agent.
+
 ## 1.20.0
 - `tools/usage.py` / `/weekly` (#47, from spike #43): context cost share by tool-result kind. Every tool result still in the main context is charged on each later call (first send as a cache write ×1.25, then a cache read ×0.1) until `/clear`, `/compact` or a context drop; shares of the weighted main-context cost for full reads over `[context] max_read_lines`, small reads, targeted reads, `context.py` output, other Bash output, subagent results and other, plus the fixed prefix and output. `--json` gets a top-level `cost_share` object; the text view a "Context cost share" line. Claude Code only.
 - **Upgrade**: nothing to do by hand.
