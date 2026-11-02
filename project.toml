@@ -25,6 +25,7 @@ trailers = "none"            # attribution in agent commits and PR bodies: none 
 [context]
 max_read_lines = 400         # tools/gate_guard.py blocks a full read of a text file longer than this (Claude Code); 0 = off
 prefix_budget = 2500         # make check warns when AGENTS.md + CLAUDE.md + command/agent descriptions exceed these tokens; 0 = off
+checkpoint_tokens = 80000    # tools/context_watch.py asks the agent to checkpoint and /clear past this context size (Claude Code); 0 = off
 
 [guard]
 write_paths = []             # directories outside the repository agents may edit (Claude Code hook), e.g. ["~/projects/agentic-skeleton"]

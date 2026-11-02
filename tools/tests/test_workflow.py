@@ -1360,6 +1360,84 @@ class GateTest(unittest.TestCase):
         s = json.loads(r.read(".claude/settings.json"))
         self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
         self.assertIn("Read", json.dumps(s["hooks"]["PreToolUse"]))
+        self.assertEqual(json.dumps(s).count("context_watch.py"), 1)
+        self.assertIn("context_watch.py", json.dumps(s["hooks"]["PostToolUse"]))
+        s["hooks"]["PostToolUse"][0]["matcher"] = "Bash"  # an older matcher of the checkpoint hook is replaced, not duplicated
+        s["hooks"]["PostToolUse"].append({"matcher": "Edit", "hooks": [own]})
+        r.write(".claude/settings.json", json.dumps(s))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(json.dumps(s).count("context_watch.py"), 1)
+        self.assertEqual(len(s["hooks"]["PostToolUse"]), 2)
+        self.assertIn('"matcher": "*"', json.dumps(s["hooks"]["PostToolUse"]))
+
+    def watch(self, records: list, tmp: str, raw: str | None = None) -> subprocess.CompletedProcess:
+        tr = os.path.join(self.r.dir, ".transcript.jsonl")
+        with open(tr, "w", encoding="utf-8") as f:
+            f.write(raw if raw is not None else "".join(json.dumps(x) + "\n" for x in records))
+        ev = {"session_id": "s1", "transcript_path": tr, "cwd": self.r.dir, "hook_event_name": "PostToolUse", "tool_name": "Bash"}
+        return subprocess.run([sys.executable, "tools/context_watch.py"], cwd=self.r.dir, env={**self.r.env, "TMPDIR": tmp},
+                              input=json.dumps(ev), capture_output=True, text=True, encoding="utf-8")
+
+    def test_context_watch_asks_for_a_checkpoint_past_the_threshold(self):
+        r, i = self.r, self.i
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Executing", plan=f"TSK-{i}-01: build", ok="x"))
+        tmp = tempfile.mkdtemp(prefix="wf-watch-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        prompt = {"type": "user", "userType": "external",
+                  "message": {"role": "user", "content": f"<command-name>/run</command-name>\n<command-args>{i}</command-args>"}}
+
+        def call(n: int, side: bool = False) -> dict:
+            return {"type": "assistant", "isSidechain": side, "message": {"role": "assistant", "usage": {
+                "input_tokens": 5, "cache_read_input_tokens": n - 1005, "cache_creation_input_tokens": 1000, "output_tokens": 300}}}
+
+        def out(p: subprocess.CompletedProcess) -> str | None:
+            self.assertEqual(p.returncode, 0, p.stderr)
+            return json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"] if p.stdout.strip() else None
+
+        self.assertIsNone(out(self.watch([prompt, call(50000)], tmp)))  # below the threshold
+        msg = out(self.watch([prompt, call(90000)], tmp))
+        self.assertIn("Context ~90k tokens (threshold 80k)", msg)
+        self.assertIn("RUN §3", msg)
+        self.assertIn(f"`/clear`, then `/run {i}`", msg)
+        self.assertIsNone(out(self.watch([prompt, call(105000)], tmp)))  # once per crossing ...
+        self.assertIn("~110k", out(self.watch([prompt, call(110000)], tmp)))  # ... then every +20k
+        self.assertIsNone(out(self.watch([prompt, call(120000)], tmp)))
+        self.assertIsNone(out(self.watch([prompt, call(40000)], tmp)))  # after /compact: reset
+        self.assertIsNotNone(out(self.watch([prompt, call(85000)], tmp)))
+        other = {**prompt, "message": {"role": "user", "content": "<command-name>/brief</command-name>"}}
+        self.assertIn("before the next command", out(self.watch([other, call(200000)], tmp)))
+        free = {**prompt, "message": {"role": "user", "content": "hello"}}
+        self.assertIn("make next", out(self.watch([free, call(250000)], tmp)))
+        compact = {**prompt, "message": {"role": "user", "content": "<command-name>/compact</command-name>"}}
+        msg = out(self.watch([prompt, call(90000), free, compact, call(280000)], tmp))  # follow-ups and built-ins keep the /run
+        self.assertIn(f"`/run {i}`", msg)
+        r.write(f"delivery/30-runs/RUN-{i}.md", RUN.format(i=i, st="Draft", plan=f"TSK-{i}-01: build", ok=" "))
+        msg = out(self.watch([prompt, call(300000)], tmp))  # strategy not approved: not executing
+        self.assertNotIn("RUN §3", msg)
+        self.assertIsNone(out(self.watch([prompt, call(20000), call(400000, side=True)], tmp)))  # a subagent's call is not ours
+        self.assertIsNone(out(self.watch([], tmp, raw="{not json\n\x00garbage")))  # malformed: nothing, exit 0
+        bad = subprocess.run([sys.executable, "tools/context_watch.py"], cwd=r.dir, env={**r.env, "TMPDIR": tmp}, input="nope",
+                             capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual((bad.returncode, bad.stdout), (0, ""))
+        r.write("project.toml", r.read("project.toml").replace("checkpoint_tokens = 80000", "checkpoint_tokens = 0"))
+        self.assertIsNone(out(self.watch([prompt, call(500000)], tmp)))  # 0 = off
+        self.assertNotIn("agentic-context-watch", os.listdir(r.dir))
+
+    def test_check_warns_on_executing_run_steps_without_a_plan_task(self):
+        r, i = self.r, self.i
+        base = RUN.format(i=i, st="Executing", plan=f"TSK-{i}-01: build", ok="x").replace("- Step 1: ", "- ")
+        sec3 = "# 3. Execution Log (Agent)\n### Steps\n{}\n### Changes (high-level)\n- Code:\n"
+
+        def warns(steps: str, st: str = "Executing") -> list:
+            r.write(f"delivery/30-runs/RUN-{i}.md", base.replace("Executing", st, 1) + sec3.format(steps))
+            data = json.loads(r.run("tools/check_workflow.py", "--json", ok=False).stdout)["data"]
+            return [x["message"] for x in data["issues"] if "§3 Steps" in x["message"]]
+
+        self.assertTrue(warns("- wrote the models"))
+        self.assertFalse(warns(f"- TSK-{i}-01: done · files: a.py · tests: test_a · next: —"))
+        self.assertFalse(warns("- TSK-<ID>-01: done · files: … · tests: … · next: TSK-<ID>-02"))  # template placeholder
+        self.assertFalse(warns("- wrote the models", st="Tuning"))  # other statuses untouched
 
 
 class SecurityTest(unittest.TestCase):

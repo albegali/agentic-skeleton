@@ -63,8 +63,9 @@ SHELL_DENY = [
 ]
 
 
-def last_command(transcript: str | None) -> tuple[str | None, str]:
-    """(command, args) of the human's latest prompt when it is a workflow command; (None, "") otherwise."""
+def last_command(transcript: str | None, sticky: bool = False) -> tuple[str | None, str]:
+    """(command, args) of the human's latest prompt when it is a workflow command; (None, "") otherwise.
+    sticky: the latest workflow command of the session, kept across free-text follow-ups and built-ins (`/compact`)."""
     if not transcript or not os.path.exists(transcript):
         return None, ""
     last: tuple[str | None, str] = (None, "")
@@ -81,7 +82,9 @@ def last_command(transcript: str | None) -> tuple[str | None, str]:
             if not any(t.strip() for t in texts):
                 continue  # tool results
             m = next((COMMAND.search(t) for t in texts if COMMAND.search(t)), None)
-            last = (m.group(1).split(":")[-1], (m.group(2) or "").strip()) if m else (None, "")
+            if sticky and not (m and m.group(1).split(":")[-1] in wf.workflow().get("commands", {})):
+                continue
+            last =(m.group(1).split(":")[-1], (m.group(2) or "").strip()) if m else (None, "")
     return last
 
 

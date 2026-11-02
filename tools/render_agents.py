@@ -76,7 +76,7 @@ def merge(p: str, generated: str, block: str | None) -> str:
             data.setdefault("model", gen["model"])
         for event, entries in gen.get("hooks", {}).items():  # our hook entries are added once; the project's stay
             mine = data.setdefault("hooks", {}).setdefault(event, [])
-            ours = lambda e: "tools/gate_guard.py" in json.dumps(e)
+            ours = lambda e: any(f"tools/{h}" in json.dumps(e) for h in OUR_HOOKS)
             mine[:] = [e for e in mine if e in entries or not ours(e)]  # an older matcher of our hook is replaced, not duplicated
             mine += [e for e in entries if e not in mine]
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
@@ -127,10 +127,14 @@ SETTINGS = {
                  "Bash(cat .env:*)", "Bash(terraform apply:*)", "Read(./.env)", "Read(./.env.*)",
                  "Bash(sudo:*)", "Bash(mkfs:*)", "Bash(shred:*)", "Bash(diskutil eraseDisk:*)", "Bash(diskutil eraseVolume:*)"],
     },
-    # human gates and mode boundaries (tools/gate_guard.py); the deny list above only matches command prefixes
+    # human gates and mode boundaries (tools/gate_guard.py); the deny list above only matches command prefixes;
+    # context checkpoint past `[context] checkpoint_tokens` (tools/context_watch.py)
     "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash|Read",
-                              "hooks": [{"type": "command", "command": 'python3 "$CLAUDE_PROJECT_DIR/tools/gate_guard.py"'}]}]},
+                              "hooks": [{"type": "command", "command": 'python3 "$CLAUDE_PROJECT_DIR/tools/gate_guard.py"'}]}],
+              "PostToolUse": [{"matcher": "*",
+                               "hooks": [{"type": "command", "command": 'python3 "$CLAUDE_PROJECT_DIR/tools/context_watch.py"'}]}]},
 }
+OUR_HOOKS = ("gate_guard.py", "context_watch.py")  # an entry naming one of these is ours: replaced on render, not duplicated
 
 
 def settings() -> dict:
