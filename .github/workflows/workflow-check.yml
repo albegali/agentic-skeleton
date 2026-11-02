@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     env:
-      WF_TEST_TIMEOUT: "300"  # seconds: a hang dumps the stacks instead of running until the job timeout
+      WF_TEST_TIMEOUT: "600"  # seconds for the whole suite (Windows takes ~5 min): a hang dumps the stacks before the job timeout
     strategy:
       fail-fast: false
       matrix:

@@ -5,6 +5,7 @@ project must do beyond `make sync-skeleton`.
 
 ## 1.25.1
 - Branches of the upstream skeleton remote (#61): `make next` and `make check` reported `skeleton/main` and the skeleton's feature branches (fetched by `make sync-skeleton`) as stale story branches, and a skeleton branch whose name contains a project story ID (e.g. `feat/ap0105-…`) as a claim on that story. `wf.branch_refs()` now lists local branches and every remote except the one pointing at `[skeleton] source` (unless `main` tracks it: the skeleton itself); `story_branches()` and `stale_branches()` use it, and strip any of those remotes' prefix (not only `origin/`).
+- `wf` git calls never wait for input (stdin closed, `GIT_TERMINAL_PROMPT=0`). CI: `WF_TEST_TIMEOUT` is the whole suite's deadline, raised from 300 to 600 s (the Windows suite takes ~5 min).
 - **Upgrade**: nothing to do by hand. The workaround `git remote set-branches skeleton main` is no longer needed but harmless.
 
 ## 1.25.0
