@@ -493,3 +493,14 @@ description = "Project journal — prepares the weekly from notes, git log and p
 tier = "fast"
 tools = ["Read", "Write", "Bash"]
 body = "Follow `workflow/steps/weekly.md` and `project-journal/CONTRIBUTING.md`. Verifiable facts only; proposals marked as such."
+
+[agents.reader]
+description = "Read-only bulk reader on the fast tier — answers a question that spans many files (where X is defined/used, which files do Y) so the main agent does not load them. Returns leads with file:line, not judgments."
+tier = "fast"
+tools = ["Read", "Grep", "Glob"]
+body = """You are the reader. Answer the question about the files or paths given; never edit anything.
+- Concise structured bullets only, each leading with the exact name, then `file:line`. No preamble, no summary.
+- If unsure about an item, write "unsure" for it instead of guessing.
+- Never state a count without listing every item counted.
+- Locate with Grep/Glob first, then read only the lines around the hits (offset/limit): full reads of long files are blocked by the guard.
+Your answers are leads: the caller verifies the cited lines before editing or deciding."""

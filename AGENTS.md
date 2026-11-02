@@ -53,7 +53,7 @@ The chain of one story shares one ID (`project.toml` → `id_prefix` + 4 digits,
 2. **The context budget is binding**: read only what `tools/context.py` prints. In long documents use the extracted sections, never the whole file.
 3. **Scripts before the LLM**: state, naming, consistency and backlog views come from `make next`, `make check`, `make backlog`.
 4. **Right tier** (single source; other files link here): `fast` for state, journal and closure, `balanced` for everything else, `deep` only for `/architecture`, `/onboard`, L/XL stories (`/run-deep`, routed by `make next`), or when the user asks. Mapping per vendor in `models.toml`.
-5. **No subagents by default**: only for genuinely independent workstreams.
+5. **No subagents by default**: only for genuinely independent workstreams. Exception: the read-only `reader` subagent (fast tier; Claude Code and Copilot, not Codex/Cursor) for questions that span many files (`/onboard`, `/analysis` of existing code, "where is X used"); its answers are leads with `file:line` to verify. Not for editing (read the exact section yourself first), debugging, architecture or review judgments.
 6. **Short output**: artifacts follow templates without restating sources; chat gets a few lines, the content is in the files.
 7. **Do not re-read** what you just wrote; read guides and templates once per session.
 8. **Resume from files**: if a session breaks, start again from `make next`.

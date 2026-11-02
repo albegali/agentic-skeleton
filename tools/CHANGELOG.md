@@ -3,6 +3,11 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.21.0
+- `reader` subagent (#46, from spike #43): read-only (`Read`, `Grep`, `Glob`, no Bash) on the `fast` tier, rendered from `workflow.toml [agents.reader]` to `.claude/agents/reader.md` (and `.github/agents/reader.agent.md` for Copilot; Codex and Cursor have no subagents). It answers questions that span many files with bullets that lead with the exact name and `file:line`, no preamble or summary, "unsure" instead of guessing, no count without the items; the caller verifies the lines before editing. AGENTS.md §5 says when to use it (`/onboard`, `/analysis` of existing code, cross-file questions) and when not (editing, debugging, architecture, review judgments); CLAUDE.md names it as the exception to "no subagents".
+- `gate_guard.py`: the large-read block message also points to the `reader` subagent.
+- **Upgrade**: `make sync-skeleton` (or `make agents` after taking `workflow/workflow.toml`) renders the new agent.
+
 ## 1.19.0
 - Large-read guard (#42): `gate_guard.py` blocks a full `Read` (no offset/limit) or a bare `cat|head|tail|less|more <file>` of a text file longer than `project.toml [context] max_read_lines` (default 400, `0` = off) and points the agent to `tools/context.py --index`, a section extract or an offset/limit read. Small, missing and binary files, targeted reads and piped commands pass. The hook matcher now includes `Read`; `make agents` replaces the older matcher of our hook instead of adding a second entry.
 - `tools/usage.py` / `/weekly`: new column and total "large reads blocked" (from the guard's message in the session logs, Claude Code only).
