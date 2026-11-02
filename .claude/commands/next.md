@@ -1,5 +1,5 @@
 ---
-description: "Compute the next workflow step and tell which command, mode and model to use (minimal cost)"
+description: "Next workflow step: which command, mode and model to use"
 argument-hint: "[ID]  (optional: state of one story)"
 model: haiku
 allowed-tools: Bash(python3 tools/next_step.py:*), Read

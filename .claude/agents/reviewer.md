@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: "Review mode — checks Brief/Spec/RUN alignment, scope creep, quality gates and persistence. Never modifies code."
+description: "Review mode — Brief/Spec/RUN alignment, scope creep, quality gates, persistence. Never modifies code."
 model: sonnet
 tools: Read, Grep, Glob, Edit, Bash
 ---

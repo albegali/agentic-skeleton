@@ -1,5 +1,5 @@
 ---
-description: "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from the vision and sources"
+description: "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements"
 argument-hint: "[source files: transcripts, documents…]"
 model: sonnet
 ---

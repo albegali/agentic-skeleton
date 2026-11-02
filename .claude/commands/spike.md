@@ -1,5 +1,5 @@
 ---
-description: "Developer mode — spike: time-boxed investigation, findings note and follow-up stories; no code merged"
+description: "Developer mode — spike: time-boxed investigation, findings note, follow-up stories; no code merged"
 argument-hint: "<ID> [time-box]"
 model: sonnet
 ---

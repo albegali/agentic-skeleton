@@ -434,6 +434,15 @@ What the skeleton already does for you:
 - thin commands that point to step files, which load only when used;
 - a slim delivery guide, with RUN, hotfix and refactor sections loaded on demand;
 - the `fast` tier for routing, closure and the journal, `deep` only for architecture and onboarding (tier rule: `AGENTS.md` §5).
+- quiet success output: `make test-tools` and the `[stack]` `make setup|test|lint` print a short summary when they pass
+  (the `WARN` lines and the last summary lines, e.g. `Ran 129 tests in 75s` / `OK`), everything when they fail; `V=1` for the
+  full output (`tools/quiet.py`). `make check` and `make gates` print one summary line per area or gate;
+- a size budget for what every call carries: `make check` reports the always-loaded prefix (`AGENTS.md`, `CLAUDE.md`, the
+  command and agent descriptions) as `prefix ~N/B tokens` and warns above `project.toml [context] prefix_budget`
+  (`0` = off). Keep rules short; detail needed by one step belongs in that step's file;
+- the `reader` subagent (`AGENTS.md` §5) for questions that span many files: read-only enforced in Claude Code
+  (`Read`, `Grep`, `Glob`), read-only by instruction only in Copilot, absent in Codex and Cursor (no subagents). Its
+  answers are leads: before editing, read the exact section yourself.
 
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.

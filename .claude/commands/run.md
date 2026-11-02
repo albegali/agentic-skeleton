@@ -1,5 +1,5 @@
 ---
-description: "Developer mode — RUN strategy, approval, execution, tuning (same session for the same story)"
+description: "Developer mode — RUN strategy, approval, execution, tuning (one session per story)"
 argument-hint: "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
 model: sonnet
 ---
