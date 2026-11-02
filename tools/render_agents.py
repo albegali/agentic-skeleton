@@ -125,8 +125,7 @@ SETTINGS = {
         "deny": ["Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push --force-with-lease:*)", "Bash(git push origin --delete:*)",
                  "Bash(git reset --hard:*)", "Bash(git branch -D:*)", "Bash(make approve:*)", "Bash(python3 tools/approve.py:*)",
                  "Bash(cat .env:*)", "Bash(terraform apply:*)", "Read(./.env)", "Read(./.env.*)",
-                 "Bash(sudo:*)", "Bash(mkfs:*)", "Bash(shred:*)", "Bash(diskutil eraseDisk:*)", "Bash(diskutil eraseVolume:*)",
-                 "Bash(rm -rf ~:*)", "Bash(rm -rf $HOME:*)"],
+                 "Bash(sudo:*)", "Bash(mkfs:*)", "Bash(shred:*)", "Bash(diskutil eraseDisk:*)", "Bash(diskutil eraseVolume:*)"],
     },
     # human gates and mode boundaries (tools/gate_guard.py); the deny list above only matches command prefixes
     "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash|Read",

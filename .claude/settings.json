@@ -31,9 +31,7 @@
       "Bash(mkfs:*)",
       "Bash(shred:*)",
       "Bash(diskutil eraseDisk:*)",
-      "Bash(diskutil eraseVolume:*)",
-      "Bash(rm -rf ~:*)",
-      "Bash(rm -rf $HOME:*)"
+      "Bash(diskutil eraseVolume:*)"
     ]
   },
   "model": "sonnet",

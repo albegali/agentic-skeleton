@@ -13,7 +13,8 @@ call and its stderr goes back to the agent. Blocks:
     system temp dirs excepted) or of a target it cannot resolve (`$VAR`, top-level glob); `chmod|chown -R` and
     `find … -delete` outside the repository; `git clean -x` at the root without `-n`; `sudo`, `mkfs`, `shred`,
     `dd of=/dev/…`, `diskutil erase…`, `curl|wget … | sh`;
-  - an edit or write outside the repository, except the system temp dirs and the agent's own dir (`~/.claude/`);
+  - an edit or write outside the repository, except the system temp dirs, the agent's own dir (`~/.claude/`) and the
+    directories in `project.toml [guard] write_paths`;
   - a full read (`Read` without offset/limit, or a bare `cat`/`head`/`tail`/`less`/`more`) of a text file longer than
     `project.toml` `[context] max_read_lines` (default 400): the agent is sent to `tools/context.py --index`, a section,
     or an offset/limit read. Targeted reads, piped commands and small files pass.
@@ -212,8 +213,18 @@ def segments(cmd: str) -> list[tuple[list[str], str]]:
     return segs + [(cur, "")]
 
 
+FIND_FILTERS = {"-name", "-iname", "-path", "-ipath", "-wholename", "-regex", "-iregex", "-type", "-newer", "-mtime", "-mmin",
+                "-atime", "-amin", "-ctime", "-cmin", "-size", "-empty", "-perm", "-user", "-group"}
+
+
 def temp_dirs() -> list[str]:
     return sorted({os.path.realpath(d) for d in ("/tmp", "/private/tmp", "/var/tmp", tempfile.gettempdir())})
+
+
+def write_paths() -> list[str]:
+    """Extra directories agents may write to: `project.toml [guard] write_paths` (`~` expanded, relative to the repository)."""
+    paths = wf.project().get("guard", {}).get("write_paths") or []
+    return [os.path.realpath(os.path.join(wf.ROOT, os.path.expanduser(p))) for p in paths if isinstance(p, str) and p.strip()]
 
 
 def under(path: str, base: str) -> bool:
@@ -290,6 +301,8 @@ def destructive(cmd: str, cwd: str | None) -> str | None:
             for t in starts:
                 if why := target_problem(resolve(t, cwd), strict=False):
                     return f"find -delete in {why}: {t}"
+                if resolve(t, cwd) == os.path.realpath(wf.ROOT) and not FIND_FILTERS & set(args):
+                    return f"find -delete of the whole repository without a filter (-name, -path, -type, …): {t}"
         elif name == "git" and args[:1] == ["clean"] and "x" in short.lower() and "n" not in short and "--dry-run" not in flags:
             spec = [resolve(p, cwd) for p in paths[1:]] or [os.path.realpath(cwd) if cwd else None]
             if os.path.realpath(wf.ROOT) in spec or None in spec:
@@ -331,9 +344,10 @@ def check(event: dict) -> None:
         real, root = os.path.realpath(os.path.abspath(full)), os.path.realpath(wf.ROOT)
         if not under(real, root):
             agent = [os.path.realpath(d) for d in (os.path.expanduser("~/.claude"), os.environ.get("CLAUDE_CONFIG_DIR")) if d]
-            if not any(under(real, d) for d in temp_dirs() + agent):
-                deny(f"write outside the repository: {full}. Agents write only in the repository, the system temp dirs "
-                     f"and the agent's own dir (~/.claude/); ask the human to change files elsewhere")
+            if not any(real == d or under(real, d) for d in temp_dirs() + agent + write_paths()):
+                deny(f"write outside the repository: {full}. Agents write only in the repository, the system temp dirs, "
+                     f"the agent's own dir (~/.claude/) and `project.toml [guard] write_paths`; ask the human to add the "
+                     f"directory there or to change the file")
             return
         rel = os.path.relpath(real, root).replace(os.sep, "/")
     command, args = last_command(event.get("transcript_path"))

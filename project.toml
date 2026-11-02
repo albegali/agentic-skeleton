@@ -25,6 +25,9 @@ trailers = "none"            # attribution in agent commits and PR bodies: none 
 [context]
 max_read_lines = 400         # tools/gate_guard.py blocks a full read of a text file longer than this (Claude Code); 0 = off
 
+[guard]
+write_paths = []             # directories outside the repository agents may edit (Claude Code hook), e.g. ["~/projects/agentic-skeleton"]
+
 [gates]
 # Quality gates run by `make gates ID=<ID>` at /persist; results go into RUN §8 `### Gates` and `make check` refuses to
 # close a RUN with a failing one. test and lint come from [stack]. Empty command = gate not used.
