@@ -23,3 +23,9 @@ The mockup is the **reference for behavior**, not for architecture.
 
 ## Open UX questions
 - …
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.

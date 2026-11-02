@@ -24,8 +24,8 @@ import wf  # noqa: E402  (tools/ is on sys.path via test_workflow)
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCHEMAS = os.path.join(SRC, "schemas")
-NAMES = ["version", "next", "next-story", "backlog", "check", "plan", "journal", "story"]
-C = "1.0"
+NAMES = ["version", "next", "next-story", "backlog", "check", "plan", "journal", "story", "gates"]
+C = "1.1"
 
 SAMPLES = {
     "version": {"skeleton": "1.0.0", "contract": C},
@@ -37,6 +37,9 @@ SAMPLES = {
     "check": {"ok": True, "errors": 0, "warnings": 0, "counts": {"stories": 0}, "issues": []},
     "plan": {"releases": [], "sprints": []},
     "journal": {"context": None, "decisions": [], "learnings": [], "weekly": [], "monthly": []},
+    "gates": {"gates": [{"id": "spec:delivery/20-specs/SPEC-AP0101-x.md", "gate": "spec", "artifact": "delivery/20-specs/SPEC-AP0101-x.md",
+                         "field": "status", "current": "Draft", "proposed": "Ready", "story_id": "AP0101",
+                         "since": "2026-10-21T10:00:00+02:00", "age_days": 0}]},
     "story": {"id": "AP0101", "artifacts": [{"kind": "story", "path": "analysis/10-stories/STORY_AP0101_x.md", "status": None}],
               "tasks": [{"id": "TSK-AP0101-01"}]},
 }
@@ -106,6 +109,7 @@ class ContractTest(unittest.TestCase):
     def test_empty_states_are_valid(self) -> None:
         for name in ("backlog", "plan", "journal"):
             self.validate(name, {"contract": C, "tool": name, "data": SAMPLES[name]})
+        self.validate("gates", {"contract": C, "tool": "gates", "data": {"gates": []}})
 
     def test_tools_emit_valid_envelopes(self) -> None:
         r = Repo()
@@ -207,7 +211,7 @@ class ContractTest(unittest.TestCase):
         self.validate("envelope", env)
         with open(os.path.join(SRC, "tools", "VERSION"), encoding="utf-8") as f:
             self.assertEqual(env["data"]["skeleton"], f.read().strip())
-        self.assertIn("contract 1.0", r.run("tools/wf.py", "version").stdout)
+        self.assertIn("contract 1.1", r.run("tools/wf.py", "version").stdout)
 
     def test_failure_prints_error_envelope_and_exits_non_zero(self) -> None:
         r = Repo()

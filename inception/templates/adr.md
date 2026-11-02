@@ -27,3 +27,9 @@ drivers: [NFR-xx, FR-xx]
 
 ## Reversibility
 <Cost of changing this later: low / medium / high, and why.>
+
+---
+
+## Gates
+
+> Changes requested at a human gate (`gates.py request-changes`), one line each: `YYYY-MM-DD — changes requested by <owner>: <comment>`. Leave empty otherwise.
