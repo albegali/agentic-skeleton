@@ -3,6 +3,11 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.25.1
+- Branches of the upstream skeleton remote (#61): `make next` and `make check` reported `skeleton/main` and the skeleton's feature branches (fetched by `make sync-skeleton`) as stale story branches, and a skeleton branch whose name contains a project story ID (e.g. `feat/ap0105-…`) as a claim on that story. `wf.branch_refs()` now lists local branches and every remote except the one pointing at `[skeleton] source` (unless `main` tracks it: the skeleton itself); `story_branches()` and `stale_branches()` use it, and strip any of those remotes' prefix (not only `origin/`).
+- `wf` git calls never wait for input (stdin closed, `GIT_TERMINAL_PROMPT=0`). CI: `WF_TEST_TIMEOUT` is the whole suite's deadline, raised from 300 to 600 s (the Windows suite takes ~5 min).
+- **Upgrade**: nothing to do by hand. The workaround `git remote set-branches skeleton main` is no longer needed but harmless.
+
 ## 1.25.0
 - Context checkpoint (#55): new Claude Code `PostToolUse` hook `tools/context_watch.py`. It reads the last ~256 KB of the session transcript, takes the context of the last main-chain call (input + cache read + cache write) and, past `project.toml [context] checkpoint_tokens` (default 80000, `0` = off), adds a message for the agent, once per crossing and again every +20k (state in the system temp dir, per session). During an executing `/run <ID>` (strategy approved): finish the plan step, record it in RUN §3, then ask the human for `/clear` + `/run <ID>`; another command: finish the step's output, then `/clear`; no command: `/clear` and `make next`. It never blocks and never touches a gate.
 - RUN §3 Steps: one append-only checkpoint line per plan step, `- TSK-<ID>-01: done · files: … · tests: … · next: TSK-<ID>-02` (template and `workflow/steps/execute.md`); a resumed `/run` reads the context budget and the RUN's last §3 line. `make check` warns on an `Executing` RUN whose §3 lines do not start with a TSK ID of its §1 Plan (plans without TSK IDs are not checked; JSON contract unchanged).

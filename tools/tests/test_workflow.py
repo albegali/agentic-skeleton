@@ -1295,6 +1295,20 @@ class GateTest(unittest.TestCase):
         out = r.run("tools/check_workflow.py").stdout
         self.assertIn("branch dm0101-old", out)
         self.assertNotIn("dm0102-fresh", out)
+        # the upstream skeleton's branches (`make sync-skeleton` adds the remote) are not the project's (#61)
+        old_sha = self.git("rev-parse", "dm0101-old").strip()
+        self.git("remote", "add", "skeleton", "https://github.com/albegali/agentic-skeleton.git")
+        self.git("remote", "add", "team", "https://example.org/team/project.git")
+        self.git("update-ref", "refs/remotes/skeleton/main", old_sha)
+        self.git("update-ref", "refs/remotes/skeleton/feat/dm0102-upstream", old_sha)
+        self.git("update-ref", "refs/remotes/team/dm0103-team", old_sha)
+        out = r.run("tools/check_workflow.py").stdout
+        self.assertNotIn("skeleton", out)
+        self.assertIn("branch dm0103-team", out)  # another remote of the project still counts, without its prefix
+        code = "import json, sys; sys.path.insert(0, 'tools'); import wf; print(json.dumps(wf.story_branches()))"
+        claims = json.loads(subprocess.run([sys.executable, "-c", code], cwd=r.dir, env=r.env, capture_output=True, text=True,
+                                           check=True).stdout)
+        self.assertEqual([b["ref"] for b in claims.get("DM0102", [])], ["dm0102-fresh"])  # not skeleton/feat/dm0102-upstream
 
     def test_make_approve_commits_the_gate_alone_and_ci_checks_the_order(self):
         r, i = self.r, self.i
