@@ -84,7 +84,7 @@ def last_command(transcript: str | None, sticky: bool = False) -> tuple[str | No
             m = next((COMMAND.search(t) for t in texts if COMMAND.search(t)), None)
             if sticky and not (m and m.group(1).split(":")[-1] in wf.workflow().get("commands", {})):
                 continue
-            last =(m.group(1).split(":")[-1], (m.group(2) or "").strip()) if m else (None, "")
+            last = (m.group(1).split(":")[-1], (m.group(2) or "").strip()) if m else (None, "")
     return last
 
 
