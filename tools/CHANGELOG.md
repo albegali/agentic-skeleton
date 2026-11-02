@@ -3,6 +3,11 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.19.0
+- Large-read guard (#42): `gate_guard.py` blocks a full `Read` (no offset/limit) or a bare `cat|head|tail|less|more <file>` of a text file longer than `project.toml [context] max_read_lines` (default 400, `0` = off) and points the agent to `tools/context.py --index`, a section extract or an offset/limit read. Small, missing and binary files, targeted reads and piped commands pass. The hook matcher now includes `Read`; `make agents` replaces the older matcher of our hook instead of adding a second entry.
+- `tools/usage.py` / `/weekly`: new column and total "large reads blocked" (from the guard's message in the session logs, Claude Code only).
+- **Upgrade**: `make sync-skeleton` adds `[context]` to `project.toml` and re-renders `.claude/settings.json`. Codex, Copilot and Cursor have no hooks: they keep the AGENTS.md token rule only.
+
 ## 1.18.0
 - Contract **1.1** (additive): `gates.py list --json` (every pending human gate, from the detection `next_step.py` uses, with `id` `<gate>:<artifact path>`, `field`, `current`, `proposed`, `since`, `age_days`), `gates.py approve <gate-id>` and `gates.py request-changes <gate-id> --comment …` (envelope tool `gates`, schema `schemas/gates.schema.json`; errors `unknown_gate`, `stale_gate`, `invalid_transition`, `no_owner`, `comment_required`, `usage`, `bad_input`). The approver is the `project.toml` owner. `approve` is the same edit and commit as `make approve` (shared code in `gates.py`); `request-changes` puts the gate's field back to its draft value and adds one line to the artifact's `## Gates` section (a `# Gates` comment block in TOML), without committing.
 - `gates.py` writes atomically and keeps CRLF line endings (also for `make approve`); `approve.py` commits through `gates.commit_paths`, which also stages a not yet tracked artifact. `gate_guard.py` blocks agents from `gates.py approve|request-changes`.

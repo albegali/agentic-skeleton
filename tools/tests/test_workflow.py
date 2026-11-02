@@ -288,6 +288,7 @@ class WorkflowTest(unittest.TestCase):
                   user([{"type": "text", "text": "<!-- step body -->"}], isMeta=True),
                   msg(2, "claude-opus-5-5", 50), msg(2, "claude-opus-5-5", 50), msg(3, "claude-haiku-5-5", 5),
                   user([{"type": "tool_result", "content": "The user doesn't want to proceed with this tool use. The tool use was rejected"}]),
+                  user([{"type": "tool_result", "content": "Blocked by the workflow guard (tools/gate_guard.py): large read: big.md has 900 lines."}]),
                   user([{"type": "text", "text": "[Request interrupted by user]"}]), user([{"type": "text", "text": "go on"}], 4),
                   user("<command-name>/run</command-name>", 5), msg(6, "claude-sonnet-5-5", 30, ctx=90_000),
                   {"type": "cost-state", "sessionId": "s1", "totalCostUSD": 3.0,
@@ -306,6 +307,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual((weekly["step"], weekly["tier"], weekly["main"], weekly["main_tier"], weekly["mismatch"]),
                          ("weekly", "fast", "claude-opus-5-5", "deep", True))  # /clear neither labels nor splits
         self.assertEqual((weekly["prompts"], weekly["interrupts"], weekly["rejected"]), (2, 1, 1))
+        self.assertEqual(weekly["large_reads"], 1)
         self.assertEqual(weekly["models"]["claude-opus-5-5"]["output"], 50)  # duplicate message counted once
         self.assertEqual((run["step"], run["mismatch"], run["over"], run["cost"]), ("run", False, True, None))
         self.assertEqual((cx["step"], cx["main"], cx["models"]["gpt-5-codex"]["cache_read"], cx["peak"]), ("analysis", "gpt-5-codex", 600, 900))
@@ -1058,6 +1060,27 @@ class GateTest(unittest.TestCase):
         return subprocess.run([sys.executable, "tools/gate_guard.py"], cwd=self.r.dir, env=self.r.env, input=json.dumps(ev),
                               capture_output=True, text=True, encoding="utf-8")
 
+    def test_guard_blocks_full_reads_of_large_files_only(self):
+        r = self.r
+        r.write("big.md", "line\n" * 500)
+        r.write("small.md", "line\n" * 20)
+        r.write("blob.bin", "a\0b\n" * 900)
+        big = os.path.join(r.dir, "big.md")
+        blocked = self.guard("Read", {"file_path": big})
+        self.assertEqual(blocked.returncode, 2)
+        self.assertIn("large read: ", blocked.stderr)
+        self.assertIn("tools/context.py --index", blocked.stderr)
+        self.assertEqual(self.guard("Read", {"file_path": big, "offset": 10, "limit": 50}).returncode, 0)
+        self.assertEqual(self.guard("Read", {"file_path": os.path.join(r.dir, "small.md")}).returncode, 0)
+        self.assertEqual(self.guard("Read", {"file_path": os.path.join(r.dir, "nothing.md")}).returncode, 0)
+        self.assertEqual(self.guard("Read", {"file_path": os.path.join(r.dir, "blob.bin")}).returncode, 0)
+        self.assertEqual(self.guard("Bash", {"command": "cat big.md"}).returncode, 2)
+        self.assertEqual(self.guard("Bash", {"command": "less big.md"}).returncode, 2)
+        for ok in ("cat small.md", "head -n 20 big.md", "cat big.md | grep line", "cat big.md > out.txt", "grep line big.md", "cat missing.md"):
+            self.assertEqual(self.guard("Bash", {"command": ok}).returncode, 0, ok)
+        r.write("project.toml", r.read("project.toml") + "\n[context]\nmax_read_lines = 0\n")
+        self.assertEqual(self.guard("Read", {"file_path": big}).returncode, 0)  # 0 = off
+
     def test_guard_blocks_gate_edits_unless_the_human_typed_the_gate_command(self):
         r, i = self.r, self.i
         run = os.path.join(r.dir, f"delivery/30-runs/RUN-{i}.md")
@@ -1196,6 +1219,13 @@ class GateTest(unittest.TestCase):
         s = json.loads(r.read(".claude/settings.json"))
         self.assertEqual(len(s["hooks"]["PreToolUse"]), 2)
         self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
+        self.assertIn("Read", s["hooks"]["PreToolUse"][0]["matcher"].split("|"))
+        s["hooks"]["PreToolUse"][0]["matcher"] = "Edit|Write|MultiEdit|Bash"  # a project upgraded from before the read guard
+        r.write(".claude/settings.json", json.dumps(s))
+        r.run("tools/render_agents.py")
+        s = json.loads(r.read(".claude/settings.json"))
+        self.assertEqual(json.dumps(s).count("gate_guard.py"), 1)
+        self.assertIn("Read", json.dumps(s["hooks"]["PreToolUse"]))
 
 
 class SecurityTest(unittest.TestCase):

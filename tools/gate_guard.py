@@ -8,7 +8,10 @@ call and its stderr goes back to the agent. Blocks:
     (`/run <ID> approve`, `/run <ID> approve-deviation <n>`, `/persist <ID>`);
   - a write outside the paths of the current mode (taken from the latest workflow command in the transcript);
   - shell commands that run the human approval, rewrite or delete history and branches, bypass protection, or read
-    secrets (.env).
+    secrets (.env);
+  - a full read (`Read` without offset/limit, or a bare `cat`/`head`/`tail`/`less`/`more`) of a text file longer than
+    `project.toml` `[context] max_read_lines` (default 400): the agent is sent to `tools/context.py --index`, a section,
+    or an offset/limit read. Targeted reads, piped commands and small files pass.
 Anything it cannot parse is allowed: the hook is a guard rail, `make check --git` in CI is the backstop.
 """
 from __future__ import annotations
@@ -17,6 +20,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -111,6 +115,48 @@ def merged_by_content(branch: str) -> bool:
     return bool(merged) and merged.split()[0] == git("rev-parse", f"{trunk}^{{tree}}")
 
 
+MAX_READ_LINES = 400  # same as tools/context.py BIG
+BINARY = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".ipynb", ".svg", ".ico", ".zip", ".gz", ".woff", ".woff2"}
+FULL_READERS = {"cat", "head", "tail", "less", "more"}
+SHELL_OPS = re.compile(r"[|;&<>`$()\n]")
+
+
+def large_file(path: str) -> int | None:
+    """Line count of a text file above the `[context] max_read_lines` threshold; None when it is small, missing or binary."""
+    full = os.path.join(wf.ROOT, path) if not os.path.isabs(path) else path
+    if os.path.splitext(full)[1].lower() in BINARY or not os.path.isfile(full):
+        return None
+    try:
+        limit = int(wf.project().get("context", {}).get("max_read_lines", MAX_READ_LINES))
+        with open(full, "rb") as f:
+            head = f.read(8192)
+            if b"\0" in head:
+                return None
+            lines = head.count(b"\n") + sum(chunk.count(b"\n") for chunk in iter(lambda: f.read(1 << 20), b""))
+    except (OSError, ValueError):
+        return None
+    return lines if limit > 0 and lines > limit else None
+
+
+def full_read_target(cmd: str) -> str | None:
+    """The file of a bare `cat|head|tail|less|more <file>` (no flags, pipes, redirections or substitutions)."""
+    if SHELL_OPS.search(cmd):
+        return None
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return None
+    if len(words) != 2 or words[0] not in FULL_READERS or words[1].startswith("-"):
+        return None
+    return words[1]
+
+
+def deny_large(path: str, lines: int) -> None:
+    deny(f"large read: {path} has {lines} lines. Do not read it whole: `python3 tools/context.py --index {path}` for its headings, "
+         f"a cited section extract, or a targeted read with offset and limit (Read) / `sed -n 'A,Bp'`. "
+         f"The threshold is `[context] max_read_lines` in project.toml")
+
+
 def deny(reason: str) -> None:
     print(f"Blocked by the workflow guard (tools/gate_guard.py): {reason}", file=sys.stderr)
     sys.exit(2)
@@ -118,6 +164,10 @@ def deny(reason: str) -> None:
 
 def check(event: dict) -> None:
     tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
+    if tool == "Read":
+        if inp.get("offset") is None and inp.get("limit") is None and (n := large_file(inp.get("file_path") or "")):
+            deny_large(inp["file_path"], n)
+        return
     if tool == "Bash":
         cmd = inp.get("command", "")
         force = FORCE_DELETE.match(cmd)
@@ -126,6 +176,9 @@ def check(event: dict) -> None:
                 if why == "no forced branch deletion" and force and merged_by_content(force.group(1)):
                     continue  # squash-merged story branch: `git branch -d` refuses it, but nothing is lost
                 deny(f"{why}: `{cmd[:120]}`")
+        target = full_read_target(cmd)
+        if target and (n := large_file(target)):
+            deny_large(target, n)
         return
     if tool not in ("Edit", "Write", "MultiEdit"):
         return

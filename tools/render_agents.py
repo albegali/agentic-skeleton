@@ -76,6 +76,8 @@ def merge(p: str, generated: str, block: str | None) -> str:
             data.setdefault("model", gen["model"])
         for event, entries in gen.get("hooks", {}).items():  # our hook entries are added once; the project's stay
             mine = data.setdefault("hooks", {}).setdefault(event, [])
+            ours = lambda e: "tools/gate_guard.py" in json.dumps(e)
+            mine[:] = [e for e in mine if e in entries or not ours(e)]  # an older matcher of our hook is replaced, not duplicated
             mine += [e for e in entries if e not in mine]
         return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if block is not None and (BEGIN in cur or not cur.startswith("<!-- Generated")):
@@ -125,7 +127,7 @@ SETTINGS = {
                  "Bash(cat .env:*)", "Bash(terraform apply:*)", "Read(./.env)", "Read(./.env.*)"],
     },
     # human gates and mode boundaries (tools/gate_guard.py); the deny list above only matches command prefixes
-    "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash",
+    "hooks": {"PreToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash|Read",
                               "hooks": [{"type": "command", "command": 'python3 "$CLAUDE_PROJECT_DIR/tools/gate_guard.py"'}]}]},
 }
 
