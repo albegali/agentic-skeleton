@@ -5,6 +5,7 @@ A repository skeleton for **agent-supervised software development**: AI agents d
 - **Whole lifecycle**: inception (vision, requirements, mockup, architecture, backlog, release plan) → analysis (Analysis, workshop, Refined Story) → delivery (Brief, Spec, RUN, code, persistence, review, closure with one PR per story) → project journal.
 - **Model and vendor agnostic**: one neutral source (`workflow/workflow.toml`) is rendered into commands for **Claude Code, OpenAI Codex CLI, GitHub Copilot and Cursor**. Steps declare a tier (`fast` / `balanced` / `deep`); you choose the model per tier and vendor in `models.toml`.
 - **Token-frugal by design**: a deterministic script computes the state (`make next`), another prints the exact context of each step (`tools/context.py`), commands are thin, sessions are short.
+  Where the tokens go, what is measured and what you can trim: [docs/TOKENS.md](docs/TOKENS.md).
 - **Stack neutral**: `/architecture` proposes the stack, writes the ADRs, and wires `make setup/test/lint`.
 - **Any kind of software, new or existing**: web, services on any cloud or on-prem, mobile, desktop, games, firmware, libraries, CLIs, data, infrastructure. `make adopt TARGET=<repo>` installs the workflow into any existing repository without overwriting its files, and `/onboard` documents the codebase as the baseline (architecture, retroactive ADRs, package rules, FR index).
 - **English by default**; `/kickoff` can set another language for the artifacts.
