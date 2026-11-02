@@ -381,6 +381,35 @@ class WorkflowTest(unittest.TestCase):
         out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
         self.assertIn("full reads > 1000 lines): full reads 0.0% · small reads 38.8%", out)  # 900 lines: now a small read
 
+    def test_usage_reports_first_call_prefix_and_repository_share(self):
+        r = self.r
+        home = os.path.join(r.dir, ".home")
+        r.env.update(CLAUDE_CONFIG_DIR=os.path.join(home, "claude"), CODEX_HOME=os.path.join(home, "codex"))
+        slug = "".join(c if c.isalnum() else "-" for c in os.path.abspath(r.dir))
+        call = lambda sid, i, side=False, **u: {"type": "assistant", "sessionId": sid, "timestamp": "2026-10-14T09:00:%02dZ" % i, "requestId": f"{sid}q{i}",
+                                                "isSidechain": side, "message": {"id": f"{sid}m{i}", "model": "claude-sonnet-5-5",
+                                                "usage": {"input_tokens": 0, "output_tokens": 10, **u}}}
+        for sid, first in (("a", 40_000), ("b", 50_000), ("c", 70_000)):
+            lines = [call(sid, 1, side=True, cache_read_input_tokens=5_000),  # a subagent call is not the main chain's first call
+                     call(sid, 2, input_tokens=3, cache_creation_input_tokens=first - 3_003, cache_read_input_tokens=3_000),
+                     call(sid, 3, cache_read_input_tokens=first + 20_000)]
+            r.write(f".home/claude/projects/{slug}/{sid}.jsonl", "\n".join(map(json.dumps, lines)) + "\n")
+        codex = [{"type": "session_meta", "timestamp": "2026-10-15T10:00:00Z", "payload": {"id": "c1", "cwd": r.dir}},
+                 *({"type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"input_tokens": n, "cached_input_tokens": 0,
+                    "output_tokens": 1}, "last_token_usage": {"input_tokens": n}}}} for n in (20_000, 45_000))]
+        r.write(".home/codex/sessions/2026/10/15/rollout-a.jsonl", "\n".join(map(json.dumps, codex)) + "\n")
+        pre = json.loads(r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19", "--json").stdout)["prefix"]
+        repo = pre["repo_tokens"]
+        self.assertGreater(repo, 0)
+        self.assertEqual(pre["tools"]["claude-code"]["sessions"], 3)
+        self.assertEqual(pre["tools"]["claude-code"]["first_call_median"], 50_000)
+        self.assertAlmostEqual(pre["tools"]["claude-code"]["repo_share"], repo / 50_000)
+        self.assertEqual(pre["tools"]["codex"]["first_call_median"], 20_000)
+        out = r.run("tools/usage.py", "--since", "2026-10-12", "--until", "2026-10-19").stdout
+        self.assertIn(f"Fixed prefix: first-call context median 50.0k tokens (claude-code, 3 sessions), of which this repository ~{repo / 1e3:.1f}k "
+                      f"({repo / 50_000:.0%}): see docs/GUIDE.md § Trim your tool prefix", out)
+        self.assertIn("median 20.0k tokens (codex, 1 sessions)", out)
+
     def test_check_detects_errors(self):
         r = self.r
         r.through_inception()
