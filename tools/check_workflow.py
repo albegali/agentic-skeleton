@@ -234,6 +234,17 @@ def unchecked(text: str, heading_rx: str) -> list[str]:
     return [m.strip() for m in UNCHECKED.findall(sec) if not re.search(r"\b(deferred|n/a|not applicable)\b", m, re.I)]
 
 
+def unplanned_steps(text: str) -> list[str]:
+    """RUN §3 `### Steps` lines (top-level bullets, placeholders skipped) that do not start with a TSK ID of the §1 Plan.
+    A plan without TSK IDs (RUNs before 1.11) is not checked."""
+    plan = set(re.findall(r"^\s*-\s*(TSK-[A-Za-z]+\d{4}-\d+)\b", wf.heading_section(text, r"^###\s+Plan\b") or "", re.M))
+    if not plan:
+        return []
+    steps = re.findall(r"^-\s*(.+)$", wf.heading_section(wf.heading_section(text, r"^#\s+3\.") or "", r"^###\s+Steps\b") or "", re.M)
+    real = [s for s in steps if "<ID>" not in s and not PLACEHOLDER.search("- " + s)]
+    return [s for s in real if (s.split(":")[0].split()[:1] or [""])[0] not in plan]
+
+
 PLACEHOLDER = re.compile(r"^\s*(?:-\s*)?(?:…|\.\.\.)\s*$|^\s*-\s*Step \d+:\s*…\s*$|(?:^|[\s(])<[A-Z][^<>\n]{0,60}>|\bYYYY-MM-DD\b|\bN?FR-xx\b")
 
 
@@ -345,6 +356,9 @@ def check_chain() -> None:
             E.append(f"RUN-{i}: Execution Strategy missing")
         if s and s not in ("Draft", "Stopped", "Cancelled") and not wf.run_approved(t):
             E.append(f"RUN-{i}: status {s} without recorded approval (§2)")
+        if s == "Executing" and (bad := unplanned_steps(t)):
+            W.append(f"RUN-{i}: Executing with §3 Steps lines that do not start with a §1 Plan task (`- TSK-…-NN: done · files: … · "
+                     f"tests: … · next: …`, the resume checkpoint): " + "; ".join(b[:60] for b in bad))
         if s == "Blocked" and not wf.open_deviations(t):
             W.append(f"RUN-{i}: Blocked without a §6 deviation awaiting approval (`Scope impact: Requires approval`)")
         if s not in ("Closed", "Cancelled") and (gone := stories.get(i, {}).get("status")) in ("cancelled", "superseded"):

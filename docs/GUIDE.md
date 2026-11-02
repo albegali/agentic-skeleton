@@ -446,7 +446,7 @@ What the skeleton already does for you:
 
 What you should do:
 1. **Start a fresh session for every step** (`/clear` in Claude Code, a new chat elsewhere). The only exception is the `/run` chain of one story.
-2. If a session gets past about 80k tokens (Claude Code: `/context`), `/clear` and resume with the step's command (`/run <ID>` during execution): the RUN is the memory.
+2. If a session gets long, `/clear` and resume with the step's command (`/run <ID>` during execution, from the RUN's last §3 checkpoint line): the RUN is the memory. Claude Code tells the agent when the context passes `project.toml [context] checkpoint_tokens` (default 80k, hook `tools/context_watch.py`); elsewhere, watch it yourself.
    Every session also carries a fixed baseline before the step reads anything: the tool's system prompt, the tool schemas of each enabled MCP server, and the skill list. It can be tens of thousands of tokens. Disable the MCP servers, skills and plugins this repository does not use ([9.1](#91-trim-your-tool-prefix)); `context.py` estimates only what the step adds.
 3. Keep stories small (S/M). Split XL stories in `/backlog`.
 4. Don't paste long logs or whole files into the chat: point to the path.

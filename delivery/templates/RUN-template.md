@@ -76,8 +76,8 @@ Date:
 # 3. Execution Log (Agent)
 
 ### Steps
-- Step 1: …
-- Step 2: …
+> One line per plan step when it is done, append-only: the checkpoint a resumed `/run` starts from.
+- TSK-<ID>-01: done · files: … · tests: … · next: TSK-<ID>-02
 
 ### Changes (high-level)
 - Code:

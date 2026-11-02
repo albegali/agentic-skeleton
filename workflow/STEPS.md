@@ -23,7 +23,7 @@ Order: inception (kickoff → requirements → mockup → architecture → backl
 | [`spec-approval`](steps/spec-approval.md) | human | developer | — | — | — | — | — | — | — |
 | [`run-strategy`](steps/run-strategy.md) | agent | developer | /run | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | Claude Sonnet 5.5 | fresh; stays open for approval and execution |
 | [`run-approval`](steps/run-approval.md) | human | developer | — | — | — | — | — | — | — |
-| [`execute`](steps/execute.md) | agent | developer | /run | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | Claude Sonnet 5.5 | same as the strategy while the session is under ~80k tokens; otherwise /clear, then /run <ID> (the RUN is the memory) |
+| [`execute`](steps/execute.md) | agent | developer | /run | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | Claude Sonnet 5.5 | same as the strategy until the context is long (Claude Code warns past [context] checkpoint_tokens); then /clear, then /run <ID> (the RUN is the memory) |
 | [`tuning`](steps/tuning.md) | human | developer | — | — | — | — | — | — | — |
 | [`security`](steps/security.md) | agent | review | /security-review | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | Claude Sonnet 5.5 | fresh |
 | [`review`](steps/review.md) | agent | review | /review-story | balanced | sonnet | gpt-5-codex | Claude Sonnet 5.5 | Claude Sonnet 5.5 | fresh (fresh eyes) |
