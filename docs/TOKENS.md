@@ -118,4 +118,4 @@ The `reader` subagent is the cheaper native equivalent. Where it might still pay
 ## 6. Measured result
 
 **Pending.** The before/after on real delivery with 1.19.0–1.23.0 (agentic-portal stories) is being measured in
-[#56](https://github.com/albegali/agentic-skeleton/issues/56). No numbers until then.
+[#58](https://github.com/albegali/agentic-skeleton/issues/58). No numbers until then.
