@@ -1,5 +1,5 @@
 ---
-description: "Inception — set up the project (name, ID prefix, language, tools) and write vision, summary, stakeholders, glossary"
+description: "Inception — project setup (name, ID prefix, language, tools), vision, summary, stakeholders, glossary"
 argument-hint: "[project name] [source files: brief, transcript, notes…]"
 model: sonnet
 ---

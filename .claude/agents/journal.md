@@ -1,6 +1,6 @@
 ---
 name: journal
-description: "Project journal — prepares the weekly from notes, git log and plan state with minimal cost."
+description: "Project journal — the weekly from notes, git log and plan state."
 model: haiku
 tools: Read, Write, Bash
 ---

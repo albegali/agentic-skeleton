@@ -3,6 +3,12 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.22.0
+- Quiet success output (#48, from spike #43): `make test-tools` and the `[stack]` `make setup|test|lint` run through the new `tools/quiet.py`: on success only the `WARN` lines and the last summary lines (`Ran N tests in …s` / `OK`; unittest now runs with `-b`, so stray stdout of passing tests is dropped), on failure the full output; `V=1` restores the full, streamed output. `make check` and `make gates` already print one summary line per area or gate.
+- Prefix budget: `make check` reports the always-loaded prefix (`AGENTS.md`, `CLAUDE.md`, the `.claude/commands` and `.claude/agents` descriptions) on the counts line as `prefix ~N/B tokens` and warns above `project.toml [context] prefix_budget` (default 2500, `0` = off). Not in the `--json` data (contract unchanged).
+- Trimmed: `AGENTS.md` (same rules and section numbers, shorter wording; the `reader` subagent's per-tool support moved to `docs/GUIDE.md` §9), the rendered `CLAUDE.md` and the command/agent descriptions in `workflow/workflow.toml`: prefix ~2670 → ~2380 tokens.
+- **Upgrade**: `make sync-skeleton` adds `[context] prefix_budget` to `project.toml` and re-renders the adapters. A project whose own `AGENTS.md`/`CLAUDE.md` rules exceed the budget gets a warning: shorten them, or raise the budget on purpose.
+
 ## 1.21.0
 - `reader` subagent (#46, from spike #43): read-only (`Read`, `Grep`, `Glob`, no Bash) on the `fast` tier, rendered from `workflow.toml [agents.reader]` to `.claude/agents/reader.md` (and `.github/agents/reader.agent.md` for Copilot, where the renderer sets no tool list, so read-only is enforced in Claude Code only; Codex and Cursor have no subagents). It answers questions that span many files with bullets that lead with the exact name and `file:line`, no preamble or summary, "unsure" instead of guessing, no count without the items; the caller verifies the lines before editing. AGENTS.md §5 says when to use it (`/onboard`, `/analysis` of existing code, cross-file questions) and when not (editing, debugging, architecture, review judgments); CLAUDE.md names it as the exception to "no subagents".
 - `gate_guard.py`: the large-read block message also points to the `reader` subagent.

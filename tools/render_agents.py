@@ -149,9 +149,9 @@ def render() -> dict[str, str]:
     if "claude-code" in tools:
         claude = ("@AGENTS.md\n\n"
                   "Claude Code specifics:\n"
-                  "- Start with `/next`; between steps use `/clear` (except the `/run` chain of the same story).\n"
-                  "- Each command pins its model in the frontmatter (tier → model in `models.toml`) for its own turn; the session default in `.claude/settings.json` is the balanced tier. Answer gates with the command (`/run <ID> approve`, `/run <ID> tuning: …`), not free text, so the pinned model runs them. L/XL stories use `/run-deep`. Do not switch to a larger model unless the user asks.\n"
-                  "- Subagents in `.claude/agents/` only for independent workstreams; exception: the `reader` subagent (fast tier, read-only) for questions that span many files (AGENTS.md §5).\n")
+                  "- Start with `/next`; `/clear` between steps (not within the `/run` chain of one story).\n"
+                  "- Each command pins its model for its own turn (tier → `models.toml`); the session default (`.claude/settings.json`) is the balanced tier. Answer gates with the command (`/run <ID> approve`, `/run <ID> tuning: …`), not free text, so the pinned model runs them. L/XL stories: `/run-deep`. No larger model unless the user asks.\n"
+                  "- Subagents (`.claude/agents/`): AGENTS.md §5; the `reader` subagent for questions that span many files.\n")
         out["CLAUDE.md"] = f"<!-- {HDR} -->\n# CLAUDE.md\n\n{claude}"
         blocks["CLAUDE.md"] = "## Agentic workflow\n\n" + claude
         for name, c in cmds.items():

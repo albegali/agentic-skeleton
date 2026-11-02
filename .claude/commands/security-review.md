@@ -1,5 +1,5 @@
 ---
-description: "Review mode — security review of a security-sensitive story before /review-story; records the outcome in RUN §8"
+description: "Review mode — security review of a security-sensitive story before /review-story (RUN §8)"
 argument-hint: "<ID>"
 model: sonnet
 ---

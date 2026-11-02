@@ -262,7 +262,7 @@ run = ["git log --since='7 days ago' --format='%h %ad %s' --date=short", "python
 # tools: Claude Code allowed-tools (optional; omitted = default permissions).
 
 [commands.next]
-description = "Compute the next workflow step and tell which command, mode and model to use (minimal cost)"
+description = "Next workflow step: which command, mode and model to use"
 args = "[ID]  (optional: state of one story)"
 tier = "fast"
 mode = "meta"
@@ -288,7 +288,7 @@ Waiting on you: <human gates, if any>
 """
 
 [commands.choose-models]
-description = "Choose the model per tier for each vendor/tool, then regenerate the adapters"
+description = "Choose the model per tier for each tool, then regenerate the adapters"
 args = "[vendor or tool]"
 tier = "fast"
 mode = "meta"
@@ -301,21 +301,21 @@ Chat: the final table, nothing else.
 """
 
 [commands.kickoff]
-description = "Inception — set up the project (name, ID prefix, language, tools) and write vision, summary, stakeholders, glossary"
+description = "Inception — project setup (name, ID prefix, language, tools), vision, summary, stakeholders, glossary"
 args = "[project name] [source files: brief, transcript, notes…]"
 tier = "balanced"
 mode = "product"
 body = "Follow `workflow/steps/kickoff.md`. Arguments: $ARGUMENTS"
 
 [commands.onboard]
-description = "Inception (existing codebase) — document the code as it is: architecture, retroactive ADRs, package rules, FR index, summary, vision"
+description = "Inception (existing codebase) — document the code as is: architecture, retroactive ADRs, package rules, FR index, vision"
 args = "[focus areas, docs to read, constraints]"
 tier = "deep"
 mode = "product"
 body = "Follow `workflow/steps/onboard.md`. Notes: $ARGUMENTS"
 
 [commands.requirements]
-description = "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements from the vision and sources"
+description = "Inception — functional (FR-xx) and non-functional (NFR-xx) requirements"
 args = "[source files: transcripts, documents…]"
 tier = "balanced"
 mode = "product"
@@ -336,7 +336,7 @@ mode = "product"
 body = "Follow `workflow/steps/architecture.md`. User constraints: $ARGUMENTS"
 
 [commands.backlog]
-description = "Inception — epics and user stories in backlog/stories.toml, then generate the Story files"
+description = "Inception — epics and stories in backlog/stories.toml, then the Story files"
 args = "[epic or FR scope]  (empty = whole backlog)"
 tier = "balanced"
 mode = "product"
@@ -381,7 +381,7 @@ mode = "developer"
 body = "Follow `workflow/steps/quick.md` with {ID} = $ARGUMENTS. One story per session."
 
 [commands.spike]
-description = "Developer mode — spike: time-boxed investigation, findings note and follow-up stories; no code merged"
+description = "Developer mode — spike: time-boxed investigation, findings note, follow-up stories; no code merged"
 args = "<ID> [time-box]"
 tier = "balanced"
 mode = "developer"
@@ -401,7 +401,7 @@ Chat: 3 lines with what changed and, if the RUN was blocked, the two pending gat
 """
 
 [commands.run]
-description = "Developer mode — RUN strategy, approval, execution, tuning (same session for the same story)"
+description = "Developer mode — RUN strategy, approval, execution, tuning (one session per story)"
 args = "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
 tier = "balanced"
 mode = "developer"
@@ -420,14 +420,14 @@ L/XL stories run through `/run-deep <ID>` (same procedure, deep tier); otherwise
 """
 
 [commands.run-deep]
-description = "Developer mode — /run on the deep tier, for L/XL stories (same arguments and procedure)"
+description = "Developer mode — /run on the deep tier, for L/XL stories"
 args = "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
 tier = "deep"
 mode = "developer"
 body_from = "run"
 
 [commands.persist]
-description = "Developer mode — persistence/reconciliation, story PR and CI result (RUN → Persisted; nothing merged)"
+description = "Developer mode — persistence, story PR and CI result (RUN → Persisted; nothing merged)"
 args = "<ID>"
 tier = "balanced"
 mode = "developer"
@@ -448,14 +448,14 @@ mode = "developer"
 body = "Follow `workflow/steps/close.md` with {ID} = $ARGUMENTS."
 
 [commands.security-review]
-description = "Review mode — security review of a security-sensitive story before /review-story; records the outcome in RUN §8"
+description = "Review mode — security review of a security-sensitive story before /review-story (RUN §8)"
 args = "<ID>"
 tier = "balanced"
 mode = "review"
 body = "Follow `workflow/steps/security.md` with {ID} = $ARGUMENTS."
 
 [commands.review-story]
-description = "Review mode — independent review of one story before closure; records the outcome in RUN §11"
+description = "Review mode — independent review of one story before closure (RUN §11)"
 args = "<ID>"
 tier = "balanced"
 mode = "review"
@@ -477,25 +477,25 @@ tools = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
 body = "You are the analyst. Follow `analysis/AGENT_GUIDE.md`. Write only inside `analysis/`; read `reference/`. Use `analysis/templates/` as they are."
 
 [agents.developer]
-description = "Developer mode — executes an approved Spec through a RUN (strategy before code, human approval, in-scope execution, tuning, persistence)."
+description = "Developer mode — executes an approved Spec through a RUN: strategy, human approval, in-scope execution, tuning, persistence."
 tier = "balanced"
 tools = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
 body = "You are the Execution Agent of `delivery/AGENT_GUIDE.md`. Read the `AGENTS.md` of the packages you touch before writing the strategy and cite them in the RUN. No code before the approval is recorded in RUN §2. Never beyond the Spec."
 
 [agents.reviewer]
-description = "Review mode — checks Brief/Spec/RUN alignment, scope creep, quality gates and persistence. Never modifies code."
+description = "Review mode — Brief/Spec/RUN alignment, scope creep, quality gates, persistence. Never modifies code."
 tier = "balanced"
 tools = ["Read", "Grep", "Glob", "Edit", "Bash"]
 body = "You are the Reviewer. Follow `workflow/steps/review.md`: run `make check`, verify artifact consistency and the story's diff by hand. Write only RUN §11 and the RUN status; never code or other artifacts."
 
 [agents.journal]
-description = "Project journal — prepares the weekly from notes, git log and plan state with minimal cost."
+description = "Project journal — the weekly from notes, git log and plan state."
 tier = "fast"
 tools = ["Read", "Write", "Bash"]
 body = "Follow `workflow/steps/weekly.md` and `project-journal/CONTRIBUTING.md`. Verifiable facts only; proposals marked as such."
 
 [agents.reader]
-description = "Read-only bulk reader on the fast tier — answers a question that spans many files (where X is defined/used, which files do Y) so the main agent does not load them. Returns leads with file:line, not judgments."
+description = "Read-only bulk reader (fast tier) for a question that spans many files (where X is defined/used, which files do Y), so the main agent does not load them. Returns file:line leads, not judgments."
 tier = "fast"
 tools = ["Read", "Grep", "Glob"]
 body = """You are the reader. Answer the question about the files or paths given; never edit anything.

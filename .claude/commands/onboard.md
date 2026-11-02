@@ -1,5 +1,5 @@
 ---
-description: "Inception (existing codebase) — document the code as it is: architecture, retroactive ADRs, package rules, FR index, summary, vision"
+description: "Inception (existing codebase) — document the code as is: architecture, retroactive ADRs, package rules, FR index, vision"
 argument-hint: "[focus areas, docs to read, constraints]"
 model: opus
 ---

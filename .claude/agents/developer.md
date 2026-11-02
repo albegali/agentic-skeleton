@@ -1,6 +1,6 @@
 ---
 name: developer
-description: "Developer mode — executes an approved Spec through a RUN (strategy before code, human approval, in-scope execution, tuning, persistence)."
+description: "Developer mode — executes an approved Spec through a RUN: strategy, human approval, in-scope execution, tuning, persistence."
 model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---

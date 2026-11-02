@@ -274,6 +274,34 @@ class WorkflowTest(unittest.TestCase):
         r.run("tools/render_agents.py")
         self.assertEqual(json.loads(r.read(".claude/settings.json"))["model"], "sonnet")
 
+    def test_prefix_budget_is_reported_and_warned(self):
+        r = self.r
+        self.assertIn("prefix_budget", tomllib.loads(r.read("project.toml"))["context"])
+        r.toml_set("project.toml", "context", "prefix_budget", 100_000)
+        out = r.run("tools/check_workflow.py").stdout
+        self.assertRegex(out.splitlines()[0], r"· prefix ~\d+/100000 tokens$")
+        self.assertNotIn("always-loaded prefix", out)
+        r.toml_set("project.toml", "context", "prefix_budget", 10)
+        out = r.run("tools/check_workflow.py").stdout  # a warning, not an error
+        self.assertIn("over the budget of 10 (project.toml [context] prefix_budget)", out)
+        r.toml_set("project.toml", "context", "prefix_budget", 0)  # off
+        out = r.run("tools/check_workflow.py").stdout
+        self.assertNotIn("always-loaded prefix", out)
+        self.assertRegex(out.splitlines()[0], r"· prefix ~\d+ tokens$")
+
+    def test_quiet_output_short_on_success_full_on_failure(self):
+        r = self.r
+        script = ("import sys; print('noise\\n' * 50 + 'WARN keep me'); print('x' * 70, file=sys.stderr); "
+                  "print('-' * 70 + '\\nRan 3 tests in 0.1s\\n\\nOK'); sys.exit(int(sys.argv[1]))")
+        ok = r.run("tools/quiet.py", "--", sys.executable, "-c", script, "0").stdout
+        self.assertEqual(ok, "WARN keep me\nRan 3 tests in 0.1s\nOK\n")
+        failed = r.run("tools/quiet.py", "--", sys.executable, "-c", script, "1", ok=False)
+        self.assertEqual(failed.returncode, 1)
+        self.assertEqual(failed.stdout.count("noise"), 50)
+        self.assertIn("x" * 70, failed.stdout)
+        verbose = r.run("tools/quiet.py", "--verbose", "--", sys.executable, "-c", script, "0").stdout
+        self.assertEqual(verbose.count("noise"), 50)
+
     def test_usage_splits_sessions_by_command_and_reports_tier_shares(self):
         r = self.r
         home = os.path.join(r.dir, ".home")

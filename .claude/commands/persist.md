@@ -1,5 +1,5 @@
 ---
-description: "Developer mode — persistence/reconciliation, story PR and CI result (RUN → Persisted; nothing merged)"
+description: "Developer mode — persistence, story PR and CI result (RUN → Persisted; nothing merged)"
 argument-hint: "<ID>"
 model: sonnet
 ---

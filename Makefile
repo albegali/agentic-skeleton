@@ -2,10 +2,12 @@
 .PHONY: help next context check backlog agents usage approve claim sync-skeleton gates secrets hooks test-tools setup test lint run portal adopt
 
 PY ?= python3
+QUIET = $(PY) tools/quiet.py $(if $(V),--verbose) --
 STACK = $(PY) -c "import tomllib,sys;print(tomllib.load(open('project.toml','rb'))['stack'].get(sys.argv[1],''))"
 
 help:
 	@echo "make next | context STEP=<step> IDS='<ID…>' | check | backlog | agents | usage DAYS=7 | approve ID=<ID> GATE=<gate> | test-tools | setup | test | lint | run | adopt TARGET=<repo>"
+	@echo "tests, lint and setup print a short summary on success, everything on failure; V=1 for the full output"
 
 next:            ## next workflow step (deterministic)
 	@$(PY) tools/next_step.py
@@ -43,11 +45,11 @@ hooks:           ## install the git pre-commit hook: secret scan of the staged c
 usage:           ## agent sessions, tier share, context peaks and supervision signals from local logs: make usage DAYS=30
 	@$(PY) tools/usage.py --days $(or $(DAYS),7)
 
-test-tools:      ## tests of the workflow tools
-	@$(PY) -m unittest discover -s tools/tests -q
+test-tools:      ## tests of the workflow tools (summary on success; V=1 full output)
+	@$(QUIET) $(PY) -m unittest discover -s tools/tests -q -b
 
-setup test lint: ## stack commands, defined by /architecture in project.toml [stack]
-	@cmd="$$($(STACK) $@)"; if [ -z "$$cmd" ]; then echo "[stack] $@ not defined yet: run /architecture"; exit 1; fi; echo "$$cmd"; sh -c "$$cmd"
+setup test lint: ## stack commands, defined by /architecture in project.toml [stack] (summary on success; V=1 full output)
+	@cmd="$$($(STACK) $@)"; if [ -z "$$cmd" ]; then echo "[stack] $@ not defined yet: run /architecture"; exit 1; fi; echo "$$cmd"; $(QUIET) sh -c "$$cmd"
 
 run:             ## start the app locally and open it in the browser: project.toml [stack] run / url
 	@$(PY) tools/launch.py
