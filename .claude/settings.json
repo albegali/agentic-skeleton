@@ -26,7 +26,14 @@
       "Bash(git branch -D:*)",
       "Bash(make approve:*)",
       "Bash(python3 tools/approve.py:*)",
-      "Bash(cat .env:*)"
+      "Bash(cat .env:*)",
+      "Bash(sudo:*)",
+      "Bash(mkfs:*)",
+      "Bash(shred:*)",
+      "Bash(diskutil eraseDisk:*)",
+      "Bash(diskutil eraseVolume:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf $HOME:*)"
     ]
   },
   "model": "sonnet",
