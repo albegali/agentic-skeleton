@@ -799,6 +799,27 @@ class EdgeCaseTest(unittest.TestCase):
         self.assertEqual(r.next(i)["step"], "blocked")
         self.assertIn("invalid status 'Finished'", r.run("tools/check_workflow.py", ok=False).stdout)
 
+    def test_run_status_approved_is_flagged_and_stories_outside_the_plan_are_next(self):
+        r = self.r
+        r.through_inception()
+        i = "DM0103"
+        extra = f'[[story]]\nid = "{i}"\nepic = "EP-01"\nslug = "chore"\ntitle = "Chore"\ntype = "chore"\nsize = "S"\n' \
+                'fr = ["FR-01"]\nac = [["a", "b", "c"]]\n'
+        r.write("backlog/stories.toml", STORIES.format(st="approved") + extra)
+        r.write(f"delivery/10-briefs/BRIEF-{i}-chore.md", BRIEF_MD.format(i=i))
+        r.write(f"delivery/20-specs/SPEC-{i}-chore.md", SPEC_MD.format(i=i, st="In Progress"))
+        run = f"delivery/30-runs/RUN-{i}.md"
+        r.write(run, RUN.format(i=i, st="Tuning", plan="build", ok="x"))
+        n = r.next()  # in flight, not in PLAN.md: ahead of the sprint's analysis
+        self.assertEqual((n["step"], n["ids"], n["owner"]), ("human-gate", [i], "human"), n)
+        r.write(run, RUN.format(i=i, st="Executing", plan="build", ok="x"))
+        n = r.next()
+        self.assertEqual((n["step"], n["ids"]), ("execute", [i]), n)
+        self.assertIn("outside the plan", n["why"])
+        r.write(run, RUN.format(i=i, st="Approved", plan="build", ok="x"))
+        out = r.run("tools/check_workflow.py", ok=False).stdout
+        self.assertIn(f"{run}: invalid status 'Approved' (expected Draft | Strategy Approved | Executing", out)
+
     def test_strategy_and_approval_detection(self):
         r = self.r
         r.through_inception()
@@ -1355,6 +1376,42 @@ class GateTest(unittest.TestCase):
         self.git("commit", "-qm", "later code")
         later = json.loads(r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout)["data"]["issues"]
         self.assertFalse([x for x in later if "strategy approval" in x["message"]], later)
+
+    def test_skeleton_sync_commit_is_not_code_for_the_approval_order(self):
+        r, i = self.r, self.i
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Pat Owner")
+        self.git("config", "user.email", "pat@example.org")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+
+        def branch(name: str) -> None:
+            self.git("switch", "-q", "main")
+            self.git("switch", "-qc", name)
+
+        def sync(extra: str | None = None, bump: bool = True) -> None:
+            r.write("tools/extra.py", "print('sync')\n")
+            if bump:
+                r.toml_set("project.toml", "skeleton", "version", "9.9." + str(len(self.git("log", "--format=%h").split())))
+            if extra:
+                r.write(extra, "x = 1\n")
+            self.git("add", "-A")
+            self.git("commit", "-qm", "sync skeleton")
+
+        def approve_and_check() -> str:
+            r.run("tools/approve.py", "--gate", "strategy", "--id", i)
+            out = r.run("tools/check_workflow.py", "--json", "--git", ok=False).stdout
+            return " ".join(x["message"] for x in json.loads(out)["data"]["issues"])
+
+        branch("dm0101-upgrade")  # an upgrade commit before the approval: no error
+        sync()
+        self.assertNotIn("strategy approval", approve_and_check())
+        branch("dm0101-mixed")  # the upgrade also touches application code: still an error
+        sync("server/x.py")
+        self.assertIn(f"RUN-{i}: code committed before the strategy approval", approve_and_check())
+        branch("dm0101-no-bump")  # framework paths without the version bump: still an error
+        sync(bump=False)
+        self.assertIn(f"RUN-{i}: code committed before the strategy approval", approve_and_check())
 
     def test_hook_is_rendered_once_and_kept_next_to_the_projects_own(self):
         r = self.r

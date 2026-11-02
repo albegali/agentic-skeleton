@@ -3,6 +3,12 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.25.2
+- Skeleton-sync commits are not code (#63): `check_approval_order` (`make check --git`) skips a commit that bumps `project.toml [skeleton] version` and touches only files the skeleton installs, so a `make sync-skeleton` commit before the RUN §2 approval no longer fails CI. A version bump that also touches application code, or framework paths without the bump, still counts as code. The path sets (`INSTALL`, `UPGRADE_IF_PRESENT`, `MERGED_BY_RENDER`, `NOT_INSTALLED`) moved from `adopt.py` (not installed in projects) to `wf.py`; `wf.is_skeleton_path()` also accepts the files listed in `workflow/.generated`.
+- `make next` sees stories outside PLAN.md (#64): a story not in any sprint whose RUN is open (not Closed, Cancelled or Stopped) is continued before the sprint order, next to hotfixes ("<ID> in progress outside the plan"); when its stage waits for a human the step is `human-gate`.
+- `make check` names the file for an invalid RUN/Spec status (#65): `delivery/30-runs/RUN-<ID>.md: invalid status 'Approved' (expected Draft | Strategy Approved | …)` (the check already covered RUNs; the message only had the ID). The RUN template and `workflow/steps/execute.md` say the approval sets `Strategy Approved`, never `Approved`.
+- **Upgrade**: nothing to do by hand.
+
 ## 1.25.1
 - Branches of the upstream skeleton remote (#61): `make next` and `make check` reported `skeleton/main` and the skeleton's feature branches (fetched by `make sync-skeleton`) as stale story branches, and a skeleton branch whose name contains a project story ID (e.g. `feat/ap0105-…`) as a claim on that story. `wf.branch_refs()` now lists local branches and every remote except the one pointing at `[skeleton] source` (unless `main` tracks it: the skeleton itself); `story_branches()` and `stale_branches()` use it, and strip any of those remotes' prefix (not only `origin/`).
 - `wf` git calls never wait for input (stdin closed, `GIT_TERMINAL_PROMPT=0`). CI: `WF_TEST_TIMEOUT` is the whole suite's deadline, raised from 300 to 600 s (the Windows suite takes ~5 min).

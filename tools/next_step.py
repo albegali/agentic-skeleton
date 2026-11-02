@@ -236,6 +236,17 @@ def recommend(plan: list[dict], me: str | None = None) -> dict:
         if s[2] == "agent":
             return {**base, "step": s[0], "ids": [i], "owner": "agent", "why": f"hotfix {i} ahead of the sprint order ({s[1]})"}
 
+    # 0b. in-flight stories outside the plan (e.g. a quick-track chore): an open RUN is finished before new sprint work
+    for i, s in st.items():
+        if i in states or i in hotfixes or s.get("type") == "hotfix" or not mine(i) or not wf.find("run", i):
+            continue
+        g = stage(i)
+        if g[2] == "agent":
+            return {**base, "step": g[0], "ids": [i], "owner": "agent", "why": f"{i} in progress outside the plan ({g[1]})"}
+        if g[2] == "human" and g[0] != "stopped":
+            return {**base, "step": "human-gate", "ids": [i], "owner": "human", "optional": None,
+                    "why": f"{i} in progress outside the plan, waiting for you ({g[1]})"}
+
     # 1. development: continue the most advanced story of the current sprint (one at a time)
     if current:
         for stg in ("close", "review", "execute", "run-strategy", "quick", "brief-spec", "spike"):
