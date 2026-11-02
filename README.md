@@ -95,6 +95,10 @@ Model names change often: the non-Anthropic defaults in `models.toml` are marked
 - **External tracker** (Azure DevOps, Jira, …): see "Tracker adapters" in `tools/README.md`.
 - **Hotfix / refactor / NFR work**: `delivery/guide/`.
 
+## License
+
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE): free for personal, research, educational and nonprofit use. Commercial use requires a separate agreement: contact Alberto Galimberti, info@albegali.dev.
+
 ## Origin
 
 Extracted from a real project that ran this workflow: the analyst / developer / review split, the Brief → Spec → RUN chain, the human gates and the project journal come from there. Added here: the inception phase, the neutral workflow source with multi-tool adapters, model tiers, context budgets computed by script, a slimmer delivery guide, and tests for the tools.
