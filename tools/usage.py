@@ -33,6 +33,7 @@ import wf  # noqa: E402
 COMMAND_RX = re.compile(r"<command-name>/?([\w:-]+)</command-name>")
 CODEX_COMMAND_RX = re.compile(r"^(?:/(?:prompts:)?|\$)([\w-]+)")  # /prompts:name (custom prompt) or $name (skill)
 REJECTED = "tool use was rejected"
+LARGE_READ = "Blocked by the workflow guard (tools/gate_guard.py): large read"
 INTERRUPTED = "[Request interrupted by user"
 # tool built-ins: never a workflow step, so they neither label nor split a session
 BUILTINS = {"clear", "compact", "model", "context", "cost", "help", "status", "config", "login", "logout", "resume", "init",
@@ -51,7 +52,7 @@ def _ts(s: str | None) -> dt.datetime | None:
 
 
 def _segment(step: str | None = None) -> dict:
-    return {"step": step, "start": None, "end": None, "prompts": 0, "interrupts": 0, "rejected": 0, "models": {}, "peak": 0}
+    return {"step": step, "start": None, "end": None, "prompts": 0, "interrupts": 0, "rejected": 0, "large_reads": 0, "models": {}, "peak": 0}
 
 
 def _session(tool: str, sid: str) -> dict:
@@ -144,6 +145,7 @@ def claude_sessions() -> list[dict]:
                     continue
                 content = msg.get("content")
                 seg["rejected"] += sum(REJECTED in r for r in _results(content))
+                seg["large_reads"] += sum(LARGE_READ in r for r in _results(content))
                 if d.get("isMeta") or d.get("isSidechain") or d.get("userType", "external") != "external":
                     continue
                 texts = [t.strip() for t in _texts(content)]
@@ -295,12 +297,12 @@ def render(rows: list[dict], sessions: list[dict], since: dt.date, until: dt.dat
            "(local logs of this repository). Copilot, Cursor: no local logs. One row per workflow command; built-ins (/clear, /compact, …) ignored.", ""]
     if not rows:
         return "\n".join(out + ["No sessions in the period."])
-    out += ["| Start | Tool | Step | Step tier | Main model (tier) | Peak context | Prompts | Interrupts | Rejected | Output tok | Lines +/− | Cost USD |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    out += ["| Start | Tool | Step | Step tier | Main model (tier) | Peak context | Prompts | Interrupts | Rejected | Large reads blocked | Output tok | Lines +/− | Cost USD |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         out.append(f"| {r['start']:%m-%d %H:%M} | {r['tool']} | {r['step'] or '—'} | {r['tier'] or '—'} "
                    f"| {r['main']} ({r['main_tier'] or '?'}){' ✗' if r['mismatch'] else ''} | {_n(r['peak'])}{' ⚠' if r['over'] else ''} "
-                   f"| {r['prompts']} | {r['interrupts']} | {r['rejected']} | {_n(sum(m['output'] for m in r['models'].values()))} "
+                   f"| {r['prompts']} | {r['interrupts']} | {r['rejected']} | {r['large_reads']} | {_n(sum(m['output'] for m in r['models'].values()))} "
                    f"| {'+%d/−%d' % r['lines'] if r['lines'] else '—'} | {_usd(r['cost'])} |")
     models = per_model(rows, sessions)
     out += ["", "| Model | Tier | Calls (share) | Input tok | Output tok | Cache write tok | Cache read tok | Cost USD (share) |",
@@ -312,7 +314,7 @@ def render(rows: list[dict], sessions: list[dict], since: dt.date, until: dt.dat
     out += ["", "Per tier: " + " · ".join(f"{k} {_pct(v['call_share'])} of calls, {_pct(v['cost_share'])} of cost" for k, v in sorted(tiers.items()))]
     costs = [s["cost"] for s in sessions if s["cost"] is not None]
     out += [f"Totals: {len(sessions)} sessions, {len(rows)} commands · {sum(r['prompts'] for r in rows)} prompts · "
-            f"{sum(r['interrupts'] for r in rows)} interrupts · {sum(r['rejected'] for r in rows)} rejected tool calls · "
+            f"{sum(r['interrupts'] for r in rows)} interrupts · {sum(r['rejected'] for r in rows)} rejected tool calls · {sum(r['large_reads'] for r in rows)} large reads blocked · "
             f"cost {_usd(sum(costs)) if costs else '—'} USD ({len(costs)}/{len(sessions)} sessions with recorded cost) · "
             f"tier mismatches (✗): {sum(r['mismatch'] for r in rows)} · over {_n(PEAK_LIMIT)} context (⚠): {sum(r['over'] for r in rows)}"]
     return "\n".join(out)

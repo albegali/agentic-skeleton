@@ -22,6 +22,9 @@ merge = "squash"             # how /close merges the story's PR: squash | merge 
 max_branch_age_days = 3      # trunk-based development: a branch with commits older than this, not in main, is reported as stale
 trailers = "none"            # attribution in agent commits and PR bodies: none (no co-author / "generated with" lines) | agent (an `Agent: <tool>/<model>` trailer, no co-author) | tool (the tool's default)
 
+[context]
+max_read_lines = 400         # tools/gate_guard.py blocks a full read of a text file longer than this (Claude Code); 0 = off
+
 [gates]
 # Quality gates run by `make gates ID=<ID>` at /persist; results go into RUN §8 `### Gates` and `make check` refuses to
 # close a RUN with a failing one. test and lint come from [stack]. Empty command = gate not used.
