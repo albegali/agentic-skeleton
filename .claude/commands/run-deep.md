@@ -1,5 +1,5 @@
 ---
-description: "Developer mode — /run on the deep tier, for L/XL stories (same arguments and procedure)"
+description: "Developer mode — /run on the deep tier, for L/XL stories"
 argument-hint: "<ID> [approve | revise: … | tuning: … | approve-deviation <n> | cancel: …]"
 model: opus
 ---

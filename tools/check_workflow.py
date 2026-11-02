@@ -12,7 +12,8 @@ Chain:     naming of Story/Analysis/Refined Story/Brief/Spec/RUN/spike note; Spe
            RUN without an open §6 deviation; RUN still open on a cancelled story; Spec Done / RUN Closed with an unchecked
            acceptance criterion or gate; template placeholders left in Briefs, Specs and RUNs past Draft. --git: closed artifacts changed later without a Revisions line;
            on a story branch, code committed before or with the RUN §2 approval (base: $WF_BASE, origin/$GITHUB_BASE_REF or main).
-Adapters:  generated tool files are up to date (tools/render_agents.py --check).
+Adapters:  generated tool files are up to date (tools/render_agents.py --check); the always-loaded prefix (AGENTS.md, CLAUDE.md,
+           command and agent descriptions) within project.toml [context] prefix_budget tokens (0 = off), reported in the text view.
 --json:    contract envelope `check`, data {"ok", "errors", "warnings", "counts", "issues": [{"level", "area", "message"}]}
            (same exit code: a workflow with errors is still a successful check, reported in data).
 """
@@ -498,6 +499,15 @@ def check_adapters() -> None:
         if model != balanced:
             W.append(f"{s}: session default model {model!r} is not the balanced tier {balanced!r}: "
                      "follow-ups outside a command run on it (set it, or keep it on purpose)")
+    used, budget = prefix()
+    if budget and used > budget:
+        W.append(f"always-loaded prefix ~{used} tokens over the budget of {budget} (project.toml [context] prefix_budget): "
+                 "shorten AGENTS.md, CLAUDE.md or the command/agent descriptions in workflow/workflow.toml (each token is paid on every call)")
+
+
+def prefix() -> tuple[int, int]:
+    """(tokens, budget) of what every agent call loads; budget 0 = no check."""
+    return sum(wf.prefix_tokens().values()), int(wf.project().get("context", {}).get("prefix_budget", 0) or 0)
 
 
 def main() -> None:
@@ -522,7 +532,8 @@ def main() -> None:
     if "--json" in sys.argv:
         wf.dump_envelope("check", {"ok": not E, "errors": len(E), "warnings": len(W), "counts": counts, "issues": issues})
         sys.exit(1 if E else 0)
-    print(" · ".join(f"{k} {v}" for k, v in counts.items()))
+    used, budget = prefix()
+    print(" · ".join(f"{k} {v}" for k, v in counts.items()) + f" · prefix ~{used}" + (f"/{budget}" if budget else "") + " tokens")
     for w in W:
         print("WARN ", w)
     for e in E:

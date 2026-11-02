@@ -85,6 +85,17 @@ def approx_tokens(chars: int) -> int:
     return (chars + 3) // 4
 
 
+PREFIX_DESCRIBED = (".claude/commands/*.md", ".claude/agents/*.md")
+
+
+def prefix_tokens() -> dict[str, int]:
+    """Tokens loaded into every call of an agent session (Claude Code's view, the largest): AGENTS.md, CLAUDE.md and the
+    command and agent descriptions listed in the system prompt."""
+    out = {p: approx_tokens(len(read(p))) for p in ("AGENTS.md", "CLAUDE.md") if exists(p)}
+    out["descriptions"] = approx_tokens(sum(len(front(read(p), "description") or "") for pat in PREFIX_DESCRIBED for p in matches(pat)))
+    return out
+
+
 def load_toml(p: str) -> dict:
     """Parsed TOML file ({} when absent); a malformed file raises ValueError naming the file."""
     if not exists(p):

@@ -1,6 +1,6 @@
 ---
 name: reader
-description: "Read-only bulk reader on the fast tier — answers a question that spans many files (where X is defined/used, which files do Y) so the main agent does not load them. Returns leads with file:line, not judgments."
+description: "Read-only bulk reader (fast tier) for a question that spans many files (where X is defined/used, which files do Y), so the main agent does not load them. Returns file:line leads, not judgments."
 model: haiku
 tools: Read, Grep, Glob
 ---

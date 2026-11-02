@@ -1,5 +1,5 @@
 ---
-description: "Review mode — independent review of one story before closure; records the outcome in RUN §11"
+description: "Review mode — independent review of one story before closure (RUN §11)"
 argument-hint: "<ID>"
 model: sonnet
 ---

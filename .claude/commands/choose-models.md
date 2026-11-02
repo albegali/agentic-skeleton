@@ -1,5 +1,5 @@
 ---
-description: "Choose the model per tier for each vendor/tool, then regenerate the adapters"
+description: "Choose the model per tier for each tool, then regenerate the adapters"
 argument-hint: "[vendor or tool]"
 model: haiku
 ---

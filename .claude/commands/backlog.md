@@ -1,5 +1,5 @@
 ---
-description: "Inception — epics and user stories in backlog/stories.toml, then generate the Story files"
+description: "Inception — epics and stories in backlog/stories.toml, then the Story files"
 argument-hint: "[epic or FR scope]  (empty = whole backlog)"
 model: sonnet
 ---
