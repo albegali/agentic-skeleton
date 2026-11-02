@@ -188,26 +188,29 @@ SKELETON_SOURCE = "https://github.com/albegali/agentic-skeleton"
 def _git(*a: str) -> str | None:
     import subprocess
     try:
-        r = subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30)
+        r = subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
+                           stdin=subprocess.DEVNULL, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout if r.returncode == 0 else None
 
 
-def branch_refs(fmt: str = "%(refname:short)") -> tuple[list[str], set[str]]:
+@lru_cache(maxsize=None)
+def branch_refs(fmt: str = "%(refname:short)") -> tuple[tuple[str, ...], frozenset[str]]:
     """for-each-ref lines of the project's own branches, and the remotes they come from: local branches and every remote
     except the upstream skeleton (`[skeleton] source`, fetched by `make sync-skeleton`), unless `main` tracks it (the
     skeleton itself). Another remote's branches are not the project's: not claims, not stale story branches (#61)."""
     norm = lambda u: re.sub(r"(\.git)?/*$", "", u.strip()).lower()
     skeleton = norm(project().get("skeleton", {}).get("source") or SKELETON_SOURCE)
     tracked = (_git("rev-parse", "--abbrev-ref", "main@{upstream}") or "origin/").split("/", 1)[0].strip()
-    remotes = {r for r in (_git("remote") or "").split()
-               if r == tracked or norm(_git("remote", "get-url", r) or "") != skeleton}
+    urls = dict(re.match(r"remote\.(.+)\.url\s+(.*)", line).groups()
+                for line in (_git("config", "--get-regexp", r"^remote\..*\.url$") or "").splitlines() if " " in line)
+    remotes = {r for r, url in urls.items() if r == tracked or norm(url) != skeleton}
     out = _git("for-each-ref", f"--format={fmt}", "refs/heads", *(f"refs/remotes/{r}" for r in sorted(remotes)))
-    return (out.splitlines() if out else []), remotes
+    return (tuple(out.splitlines()) if out else ()), frozenset(remotes)
 
 
-def short_branch(ref: str, remotes: set[str]) -> str:
+def short_branch(ref: str, remotes: frozenset[str]) -> str:
     """Branch name without its remote prefix (`origin/pr0101-x` → `pr0101-x`)."""
     head = ref.split("/", 1)
     return head[1] if len(head) == 2 and head[0] in remotes else ref
