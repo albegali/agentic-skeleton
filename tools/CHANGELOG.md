@@ -3,6 +3,10 @@
 One heading per `tools/VERSION`, newest first (`make check` requires the current one). **Upgrade** lines say what a
 project must do beyond `make sync-skeleton`.
 
+## 1.20.0
+- `tools/usage.py` / `/weekly` (#47, from spike #43): context cost share by tool-result kind. Every tool result still in the main context is charged on each later call (first send as a cache write ×1.25, then a cache read ×0.1) until `/clear`, `/compact` or a context drop; shares of the weighted main-context cost for full reads over `[context] max_read_lines`, small reads, targeted reads, `context.py` output, other Bash output, subagent results and other, plus the fixed prefix and output. `--json` gets a top-level `cost_share` object; the text view a "Context cost share" line. Claude Code only.
+- **Upgrade**: nothing to do by hand.
+
 ## 1.19.0
 - Large-read guard (#42): `gate_guard.py` blocks a full `Read` (no offset/limit) or a bare `cat|head|tail|less|more <file>` of a text file longer than `project.toml [context] max_read_lines` (default 400, `0` = off) and points the agent to `tools/context.py --index`, a section extract or an offset/limit read. Small, missing and binary files, targeted reads and piped commands pass. The hook matcher now includes `Read`; `make agents` replaces the older matcher of our hook instead of adding a second entry.
 - `tools/usage.py` / `/weekly`: new column and total "large reads blocked" (from the guard's message in the session logs, Claude Code only).
