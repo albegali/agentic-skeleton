@@ -82,7 +82,7 @@ Codex keep local logs; Copilot and Cursor do not, so they are not counted.
 | Peak context (⚠) | sessions over 80k tokens in one call | `/clear` and resume with the step's command |
 | Large reads blocked | count of reads the guard stopped | expected to be low; many means the agent keeps trying whole files |
 | Per tier | share of calls and cost per tier | deep-tier cost outside `/architecture`, `/onboard` and L/XL stories is worth a look |
-| Fixed prefix vs repository (#54) | first-call context and the repository's share of it | when the first call is far above the repository's share, see [GUIDE.md](GUIDE.md), section *Trim your tool prefix* |
+| Fixed prefix vs repository (#54) | first-call context and the repository's share of it | when the first call is far above the repository's share, see [GUIDE.md § 9.1 Trim your tool prefix](GUIDE.md#91-trim-your-tool-prefix) |
 
 The fixed-prefix line comes with [#54](https://github.com/albegali/agentic-skeleton/issues/54); older versions only show
 the fixed-prefix share in the cost-share line.
@@ -91,7 +91,7 @@ the fixed-prefix share in the cost-share line.
 
 | Action | How |
 |---|---|
-| Trim your tool prefix | disable MCP servers, skills and plugins this project does not use: [GUIDE.md](GUIDE.md), section *Trim your tool prefix* (per tool) |
+| Trim your tool prefix | disable MCP servers, skills and plugins this project does not use: [GUIDE.md § 9.1 Trim your tool prefix](GUIDE.md#91-trim-your-tool-prefix) (per tool) |
 | Choose models per tier | `/choose-models`, or edit [`models.toml`](../models.toml) and run `make agents`; use `deep` only where the step asks for it |
 | Start a fresh session per step | `/clear` (Claude Code) or a new chat, except within the `/run` chain of one story; resume from `make next` |
 | Ask the `reader` for cross-file questions | "where is X used", `/onboard`, `/analysis` of existing code; verify its `file:line` leads before editing |
